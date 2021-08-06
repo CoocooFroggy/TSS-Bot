@@ -9,7 +9,7 @@ public class Main {
     static String token;
 
     public static boolean startBot() throws InterruptedException {
-        token = System.getenv("FDR_TOKEN");
+        token = System.getenv("TSSBOT_TOKEN");
         JDABuilder jdaBuilder = JDABuilder.createDefault(token);
 //        jdaBuilder.setActivity(Activity.playing(""));
         try {
@@ -24,13 +24,12 @@ public class Main {
     }
 
     public static void registerSlashCommands() {
-        // DEBUG
-        Guild testGuild = jda.getGuildById("685606700929384489");
-        assert testGuild != null;
+//        Guild testGuild = jda.getGuildById("685606700929384489");
+//        assert testGuild != null;
 
-        testGuild.upsertCommand("fdrlimit", "Find limits to the versions you can FutureRestore to.").queue();
-        testGuild.upsertCommand("verifyblob", "Verify a blob with img4tool.").queue();
-        testGuild.upsertCommand("bmfromurl", "Get a BuildManifest from an iPSW or OTA URL.")
+        jda.upsertCommand("fdrlimit", "Find limits to the versions you can FutureRestore to.").queue();
+        jda.upsertCommand("verifyblob", "Verify a blob with img4tool.").queue();
+        jda.upsertCommand("bmfromurl", "Get a BuildManifest from an iPSW or OTA URL.")
                 .addOption(OptionType.STRING, "url", "URL of iPSW or OTA firmware.", true)
                 .queue();
     }

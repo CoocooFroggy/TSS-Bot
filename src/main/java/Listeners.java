@@ -38,7 +38,6 @@ public class Listeners extends ListenerAdapter {
         switch (event.getName()) {
             case "fdrlimit": {
                 HashMap<String, Object> embedAndButtons = buildFrGuideEmbed("frg_start", event.getUser());
-                //TODO: Ensure we only have 5 per row
                 ActionRow actionRow = ActionRow.of((Collection<Button>) embedAndButtons.get("buttons"));
                 InteractionHook hook = event.replyEmbeds((MessageEmbed) embedAndButtons.get("embed"))
                         .addActionRows(actionRow)
@@ -121,10 +120,11 @@ public class Listeners extends ListenerAdapter {
 
             File blob = userAndFiles.get(user.getId()).get("blob");
             File bm = userAndFiles.get(user.getId()).get("bm");
-            String result = null;
             try {
-                result = img4toolVerify(blob, bm);
-                // Keep it under Discord's limits
+                String result = img4toolVerify(blob, bm);
+                // Remove all conflicting markdown code block things
+                result = result.replaceAll("`", "");
+                // Keep it under Discord's character limits
                 int amountToSubstring = 0;
                 ArrayList<String> firstLines = new ArrayList<>();
                 if (result.length() > 1500) {
