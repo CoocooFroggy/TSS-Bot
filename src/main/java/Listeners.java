@@ -137,6 +137,7 @@ public class Listeners extends ListenerAdapter {
                         if (i >= 5)
                             break;
                     }
+                    firstLines.add("...\n");
                     amountToSubstring = result.length() - 1500;
                 }
 
@@ -148,8 +149,7 @@ public class Listeners extends ListenerAdapter {
                         .append("```");
 
                 EmbedBuilder eb = new EmbedBuilder();
-
-
+                eb.setFooter(user.getName(), user.getAvatarUrl());
                 eb.setDescription(stringBuilder.toString());
                 if (result.contains("img4tool: failed with exception:")) {
                     eb.setColor(new Color(16753152));
@@ -194,11 +194,14 @@ public class Listeners extends ListenerAdapter {
             case "Reply to this message with your blob file.": {
                 if (attachments.isEmpty())
                     break;
+                InteractionHook hook = messageAndHook.get(referencedMessage.getId());
                 File blobFile = new File("collected/" + ownerId + ".shsh2");
-                // TODO: Returning file with 0 bytes? Discord says http code 400?
-                attachments.get(0).downloadToFile(blobFile).thenAccept(file -> System.out.println("Saved attachment to " + file.getName()))
+
+                attachments.get(0).downloadToFile(blobFile)
+                        .thenAccept(file -> System.out.println("Saved attachment to " + file.getName()))
                         .exceptionally(t ->
                         { // handle failure
+                            hook.sendMessage("Unable to save blob file. Please try again.").queue();
                             t.printStackTrace();
                             return null;
                         });
@@ -207,8 +210,9 @@ public class Listeners extends ListenerAdapter {
                 files.put("blob", blobFile);
                 userAndFiles.put(ownerId, files);
 
-                // If we get this far, it's a good reply
-                InteractionHook hook = messageAndHook.get(referencedMessage.getId());
+                referencedMessage.delete().queue();
+                event.getMessage().delete().queue();
+
                 Message sentMessage = hook.sendMessage("Reply to this message with a BuildManifest or a firmware link to verify the blob against.").complete();
                 messageAndOwner.put(sentMessage.getId(), event.getAuthor().getId());
                 messageAndHook.put(sentMessage.getId(), hook);
@@ -247,6 +251,8 @@ public class Listeners extends ListenerAdapter {
                 files.put("bm", bmFile);
                 userAndFiles.put(ownerId, files);
 
+                referencedMessage.delete().queue();
+                event.getMessage().delete().queue();
                 Message sentMessage = hook.sendMessage("All set—press the button to verify.").addActionRow(
                         Button.success("vb_verify", "Verify")
                 ).complete();
