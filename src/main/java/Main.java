@@ -31,14 +31,14 @@ public class Main {
 //        assert testGuild != null;
         List<Command> commands = jda.retrieveCommands().complete();
         for (Command command : commands) {
-            command.delete().queue();
+            command.delete().complete();
         }
 
-        jda.upsertCommand("minfw", "Find limits to the versions you can FutureRestore to.").queue();
-        jda.upsertCommand("verifyblob", "Verify a blob with img4tool.").queue();
+        jda.upsertCommand("minfw", "Find limits to the versions you can FutureRestore to.").complete();
+        jda.upsertCommand("verifyblob", "Verify a blob with img4tool.").complete();
         jda.upsertCommand("bm", "Get a BuildManifest from an iPSW or OTA URL.")
                 .addOption(OptionType.STRING, "url", "URL of iPSW or OTA firmware.", true)
-                .queue();
+                .complete();
     }
     
     public static void main(String[] args) {
