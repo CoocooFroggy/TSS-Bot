@@ -1,4 +1,6 @@
 import net.dv8tion.jda.api.EmbedBuilder;
+import net.dv8tion.jda.api.Permission;
+import net.dv8tion.jda.api.entities.GuildChannel;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.User;
@@ -9,6 +11,7 @@ import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.components.ActionRow;
 import net.dv8tion.jda.api.interactions.components.Button;
+import net.dv8tion.jda.internal.utils.PermissionUtil;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipFile;
 import org.apache.commons.io.FileUtils;
@@ -48,6 +51,12 @@ public class Listeners extends ListenerAdapter {
                 break;
             }
             case "verifyblob": {
+                if (event.getChannel() instanceof GuildChannel) {
+                    // If we don't have perms to send message in this channel
+                    if (!PermissionUtil.checkPermission(event.getGuildChannel(), event.getGuild().getSelfMember(), Permission.MESSAGE_WRITE)) {
+                        event.reply("I don't have permission to send messages in this channel! Try again in another channel.").setEphemeral(true).queue();
+                    }
+                }
                 InteractionHook hook = event.reply("Reply to this message with your blob file.").complete();
                 Message sentMessage = hook.retrieveOriginal().complete();
                 messageAndHook.put(sentMessage.getId(), hook);
