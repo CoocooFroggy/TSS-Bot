@@ -39,7 +39,7 @@ public class Listeners extends ListenerAdapter {
     @Override
     public void onSlashCommand(@NotNull SlashCommandEvent event) {
         switch (event.getName()) {
-            case "fdrlimit": {
+            case "minfw": {
                 HashMap<String, Object> embedAndButtons = buildFrGuideEmbed("frg_start", event.getUser());
                 ActionRow actionRow = ActionRow.of((Collection<Button>) embedAndButtons.get("buttons"));
                 InteractionHook hook = event.replyEmbeds((MessageEmbed) embedAndButtons.get("embed"))
@@ -63,7 +63,7 @@ public class Listeners extends ListenerAdapter {
                 messageAndOwner.put(sentMessage.getId(), event.getUser().getId());
                 break;
             }
-            case "bmfromurl": {
+            case "bm": {
                 String url = Objects.requireNonNull(event.getOption("url")).getAsString();
                 InteractionHook hook = event.deferReply().complete();
                 File bm;

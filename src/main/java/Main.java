@@ -2,7 +2,10 @@ import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.interactions.commands.Command;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
+
+import java.util.List;
 
 public class Main {
     static JDA jda;
@@ -11,7 +14,7 @@ public class Main {
     public static boolean startBot() throws InterruptedException {
         token = System.getenv("TSSBOT_TOKEN");
         JDABuilder jdaBuilder = JDABuilder.createDefault(token);
-//        jdaBuilder.setActivity(Activity.playing(""));
+        jdaBuilder.setActivity(Activity.watching("blobs."));
         try {
             jda = jdaBuilder.build();
         } catch (Exception e) {
@@ -26,10 +29,14 @@ public class Main {
     public static void registerSlashCommands() {
 //        Guild testGuild = jda.getGuildById("685606700929384489");
 //        assert testGuild != null;
+        List<Command> commands = jda.retrieveCommands().complete();
+        for (Command command : commands) {
+            command.delete().queue();
+        }
 
-        jda.upsertCommand("fdrlimit", "Find limits to the versions you can FutureRestore to.").queue();
+        jda.upsertCommand("minfw", "Find limits to the versions you can FutureRestore to.").queue();
         jda.upsertCommand("verifyblob", "Verify a blob with img4tool.").queue();
-        jda.upsertCommand("bmfromurl", "Get a BuildManifest from an iPSW or OTA URL.")
+        jda.upsertCommand("bm", "Get a BuildManifest from an iPSW or OTA URL.")
                 .addOption(OptionType.STRING, "url", "URL of iPSW or OTA firmware.", true)
                 .queue();
     }
@@ -42,6 +49,9 @@ public class Main {
             System.exit(1);
             return;
         }
-        registerSlashCommands();
+        if (args.length > 0 && args[0].equals("slash")) {
+            registerSlashCommands();
+            System.exit(0);
+        }
     }
 }
