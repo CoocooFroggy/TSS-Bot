@@ -27,7 +27,6 @@ public class Main {
     }
 
     public static void registerSlashCommands() {
-//         DEBUG
 //        Guild testGuild = jda.getGuildById("685606700929384489");
 //        assert testGuild != null;
 
