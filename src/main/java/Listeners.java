@@ -45,7 +45,7 @@ public class Listeners extends ListenerAdapter {
 
         switch (event.getName()) {
             case "minfw": {
-                HashMap<String, Object> embedAndButtons = buildFrGuideEmbed("frg_start", event.getUser());
+                HashMap<String, Object> embedAndButtons = buildMinFwMenu("frg_start", event.getUser());
                 ActionRow actionRow = ActionRow.of((Collection<Button>) embedAndButtons.get("buttons"));
                 InteractionHook hook = event.replyEmbeds((MessageEmbed) embedAndButtons.get("embed"))
                         .addActionRows(actionRow)
@@ -125,14 +125,14 @@ public class Listeners extends ListenerAdapter {
         if (buttonId.startsWith("frg_")) {
             // If the user who pressed the button isn't the same as the owner of this message, say no
             if (messageAndOwner.get(event.getMessageId()) == null) {
-                event.reply("Something went wrong—I forgot who summoned this menu! Please run `/frguide` again.").setEphemeral(true).queue();
+                event.reply("Something went wrong—I forgot who summoned this menu! Please run `/minfw` again.").setEphemeral(true).queue();
                 return;
             } else if (!messageAndOwner.get(event.getMessageId()).equals(user.getId())) {
-                event.reply("This is not your menu! Start your own with `/frguide`.").setEphemeral(true).queue();
+                event.reply("This is not your menu! Start your own with `/minfw`.").setEphemeral(true).queue();
                 return;
             }
 
-            HashMap<String, Object> embedAndButtons = buildFrGuideEmbed(buttonId, user);
+            HashMap<String, Object> embedAndButtons = buildMinFwMenu(buttonId, user);
             Collection<Button> buttonCollection = (Collection<Button>) embedAndButtons.get("buttons");
             if (!buttonCollection.isEmpty()) {
                 // Maybe check to make sure there's not more than 5 buttons
@@ -491,7 +491,7 @@ public class Listeners extends ListenerAdapter {
         }
     }
 
-    public static HashMap<String, Object> buildFrGuideEmbed(String stage, User user) {
+    public static HashMap<String, Object> buildMinFwMenu(String stage, User user) {
         EmbedBuilder eb = new EmbedBuilder();
         eb.setTitle("Minimum Firmware");
         eb.setFooter(user.getName(), user.getAvatarUrl());
@@ -566,7 +566,7 @@ public class Listeners extends ListenerAdapter {
                         break;
                     }
                 case "frg_apple_tv": {
-                    eb.setDescription("What chip does your Apple TV have?");
+                    eb.setDescription("What Apple TV do you have?");
                     buttons.add(Button.primary("frg_apple_tv_early", "Apple TV 3 or Earlier"));
                     buttons.add(Button.primary("frg_apple_tv_hd", "Apple TV HD"));
                     buttons.add(Button.primary("frg_apple_tv_4k", "Apple TV 4K or later"));
