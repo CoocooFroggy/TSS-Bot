@@ -27,8 +27,11 @@ public class Main {
     }
 
     public static void registerSlashCommands() {
+//         DEBUG
 //        Guild testGuild = jda.getGuildById("685606700929384489");
 //        assert testGuild != null;
+
+        /*
         List<Command> commands = jda.retrieveCommands().complete();
         for (Command command : commands) {
             command.delete().complete();
@@ -38,6 +41,10 @@ public class Main {
         jda.upsertCommand("verifyblob", "Verify a blob with img4tool.").complete();
         jda.upsertCommand("bm", "Get a BuildManifest from an iPSW or OTA URL.")
                 .addOption(OptionType.STRING, "url", "URL of iPSW or OTA firmware.", true)
+                .complete();
+                */
+        jda.upsertCommand("tss", "Check signing status of an iOS version.")
+                .addOption(OptionType.STRING, "device", "Identifier of device (EG `iPhone11,8`)", true)
                 .complete();
     }
     

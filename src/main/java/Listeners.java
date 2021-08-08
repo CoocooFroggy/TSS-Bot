@@ -24,7 +24,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -33,6 +33,8 @@ public class Listeners extends ListenerAdapter {
     HashMap<String, InteractionHook> messageAndHook = new HashMap<>();
     HashMap<String, String> messageAndOwner = new HashMap<>();
     HashMap<String, HashMap<String, File>> userAndFiles = new HashMap<>();
+    HashMap<String, HashMap<String, String>> userAndTss = new HashMap<>();
+
     @Override
     public void onSlashCommand(@NotNull SlashCommandEvent event) {
         // Disallow threads
@@ -49,8 +51,8 @@ public class Listeners extends ListenerAdapter {
                         .addActionRows(actionRow)
                         .complete();
                 Message sentMessage = hook.retrieveOriginal().complete();
-                messageAndHook.put(sentMessage.getId(), hook);
-                messageAndOwner.put(sentMessage.getId(), event.getUser().getId());
+                setMessageHook(sentMessage.getId(), hook);
+                setMessageOwner(sentMessage.getId(), event.getUser().getId());
                 break;
             }
             case "verifyblob": {
@@ -62,8 +64,8 @@ public class Listeners extends ListenerAdapter {
                 }
                 InteractionHook hook = event.reply("Reply to this message with your blob file.").complete();
                 Message sentMessage = hook.retrieveOriginal().complete();
-                messageAndHook.put(sentMessage.getId(), hook);
-                messageAndOwner.put(sentMessage.getId(), event.getUser().getId());
+                setMessageHook(sentMessage.getId(), hook);
+                setMessageOwner(sentMessage.getId(), event.getUser().getId());
                 break;
             }
             case "bm": {
@@ -82,6 +84,22 @@ public class Listeners extends ListenerAdapter {
                     return;
                 }
                 hook.sendFile(bm).queue();
+                break;
+            }
+            case "tss": {
+                // Required arg so always not null
+                String deviceIdentifier = Objects.requireNonNull(event.getOption("device")).getAsString();
+
+                HashMap<String, String> tssData = new HashMap<>();
+                tssData.put("device", deviceIdentifier);
+                userAndTss.put(event.getUser().getId(), tssData);
+
+                InteractionHook hook = event.reply("Reply to this message with a BuildManifest, link to firmware, or iOS version/build.").complete();
+                Message sentMessage = hook.retrieveOriginal().complete();
+                setMessageHook(sentMessage.getId(), hook);
+                setMessageOwner(sentMessage.getId(), event.getUser().getId());
+
+                break;
             }
         }
     }
@@ -115,19 +133,12 @@ public class Listeners extends ListenerAdapter {
                         .queue();
             }
         }
-        else if (buttonId.startsWith("vb_")) {
+        else if (buttonId.equals("vb_verify")) {
             // If the user who pressed the button isn't the same as the owner of this message, say no
-            if (messageAndOwner.get(event.getMessageId()) == null) {
-                event.reply("Something went wrong—I forgot who summoned this menu! Please run `/verifyblob` again.").setEphemeral(true).queue();
-                return;
-            }
-            else if (!messageAndOwner.get(event.getMessageId()).equals(user.getId())) {
-                event.reply("This is not your menu! Start your own with `/verifyblob`.").setEphemeral(true).queue();
-                return;
-            }
+            checkMenuOwner(event, user);
             // Get rid of verify button
             event.getMessage().delete().queue();
-
+            // Start "thinking"
             InteractionHook hook = event.deferReply().complete();
 
             File blob = userAndFiles.get(user.getId()).get("blob");
@@ -181,6 +192,101 @@ public class Listeners extends ListenerAdapter {
                         "```").queue();
             }
         }
+        else if (buttonId.equals("tss_check")) {
+            // If the user who pressed the button isn't the same as the owner of this message, say no
+            checkMenuOwner(event, user);
+            // Get rid of Check TSS button
+            event.getMessage().delete().queue();
+            // Start "thinking"
+            InteractionHook hook = event.deferReply().complete();
+
+            HashMap<String, String> tss = userAndTss.get(user.getId());
+
+            ArrayList<String> args = new ArrayList<>();
+            args.add("tsschecker");
+
+            String device = tss.get("device");
+            args.add("--device");
+            args.add(device);
+
+            String bm = tss.get("bm");
+            if (bm != null) {
+                args.add("--build-manifest");
+                args.add(bm);
+            }
+
+            String version = tss.get("version");
+            if (version != null) {
+                args.add("--ios");
+                args.add(version);
+            }
+
+            String build = tss.get("build");
+            if (build != null) {
+                args.add("--buildid");
+                args.add(build);
+            }
+
+            try {
+                String result = tssChecker(args);
+                // Remove all conflicting markdown code block things
+                result = result.replaceAll("`", "");
+                // Keep it under Discord's character limits
+                int amountToSubstring = 0;
+                ArrayList<String> firstLines = new ArrayList<>();
+                if (result.length() > 1500) {
+                    String[] allLines = result.split("\n");
+                    int i = 0;
+                    for (String line : allLines) {
+                        firstLines.add(line);
+                        i++;
+                        // Only first 5 lines
+                        if (i >= 5)
+                            break;
+                    }
+                    firstLines.add("...\n");
+                    amountToSubstring = result.length() - 1500;
+                }
+
+                StringBuilder stringBuilder = new StringBuilder();
+                stringBuilder
+                        .append("```")
+                        .append(StringUtils.join(firstLines, "\n"))
+                        .append(result.substring(amountToSubstring))
+                        .append("```");
+
+                EmbedBuilder eb = new EmbedBuilder();
+                eb.setFooter(user.getName(), user.getAvatarUrl());
+                eb.setDescription(stringBuilder.toString());
+                if (result.contains("checking tss status failed!")) {
+                    eb.setColor(new Color(16753152));
+                } else if (result.contains("IS being signed!")) {
+                    eb.setColor(new Color(708352));
+                } else if (result.contains("IS NOT being signed!")) {
+                    eb.setColor(new Color(16711680));
+                }
+
+                hook.sendMessageEmbeds(eb.build()).queue();
+            } catch (IOException e) {
+                e.printStackTrace();
+                hook.editOriginal("Failed to run tsschecker. Stack trace:\n" +
+                        "```\n" +
+                        Arrays.toString(e.getStackTrace()) +
+                        "\n" +
+                        "```").queue();
+            }
+        }
+    }
+
+    private void checkMenuOwner(@NotNull ButtonClickEvent event, User user) {
+        if (messageAndOwner.get(event.getMessageId()) == null) {
+            event.reply("Something went wrong—I forgot who summoned this menu! Please run `/verifyblob` again.").setEphemeral(true).queue();
+            return;
+        }
+        else if (!messageAndOwner.get(event.getMessageId()).equals(user.getId())) {
+            event.reply("This is not your menu! Start your own with `/verifyblob`.").setEphemeral(true).queue();
+            return;
+        }
     }
 
     @Override
@@ -191,19 +297,21 @@ public class Listeners extends ListenerAdapter {
         Message message = event.getMessage();
         List<Message.Attachment> attachments = message.getAttachments();
         Message referencedMessage = message.getReferencedMessage();
+
+        // If it's not a reply, we don't care
         if (referencedMessage == null)
             return;
-        if (!referencedMessage.getAuthor().getId().equals("872591654215893042"))
+
+        // If their not replying to our bot, we don't care
+        if (!referencedMessage.getAuthor().getId().equals(Main.jda.getSelfUser().getId()))
             return;
-        String ownerId = messageAndOwner.get(referencedMessage.getId());
-        if (ownerId == null) {
-            message.reply("Something went wrong—I forgot who summoned me! Please run `/verifyblob` again.").queue();
-            return;
-        }
-        if (!ownerId.equals(event.getAuthor().getId()))
-            return;
+
         switch (referencedMessage.getContentRaw()) {
             case "Reply to this message with your blob file.": {
+                String ownerId = messageAndOwner.get(referencedMessage.getId());
+                if (!checkMessageOwner(ownerId, referencedMessage, message, event.getAuthor()))
+                    return;
+
                 if (attachments.isEmpty())
                     break;
                 InteractionHook hook = messageAndHook.get(referencedMessage.getId());
@@ -226,11 +334,15 @@ public class Listeners extends ListenerAdapter {
                 event.getMessage().delete().queue();
 
                 Message sentMessage = hook.sendMessage("Reply to this message with a BuildManifest or a firmware link to verify the blob against.").complete();
-                messageAndOwner.put(sentMessage.getId(), event.getAuthor().getId());
-                messageAndHook.put(sentMessage.getId(), hook);
+                setMessageOwner(sentMessage.getId(), event.getAuthor().getId());
+                setMessageHook(sentMessage.getId(), hook);
                 break;
             }
             case "Reply to this message with a BuildManifest or a firmware link to verify the blob against.": {
+                String ownerId = messageAndOwner.get(referencedMessage.getId());
+                if (!checkMessageOwner(ownerId, referencedMessage, message, event.getAuthor()))
+                    return;
+
                 InteractionHook hook = messageAndHook.get(referencedMessage.getId());
 
                 String content = message.getContentRaw();
@@ -256,7 +368,9 @@ public class Listeners extends ListenerAdapter {
                     attachments.get(0).downloadToFile("collected/" + ownerId + "_BuildManifest.plist");
                     bmFile = new File("collected/" + ownerId + "_BuildManifest.plist");
                 } else {
-                    hook.sendMessage("No BuildManifest or valid link provided! Please try again.").queue();
+                    Message sentMessage = hook.sendMessage("No BuildManifest or valid link provided! Please try again.").complete();
+                    message.delete().queueAfter(5, TimeUnit.SECONDS);
+                    sentMessage.delete().queueAfter(5, TimeUnit.SECONDS);
                     return;
                 }
                 HashMap<String, File> files = userAndFiles.get(ownerId);
@@ -268,8 +382,77 @@ public class Listeners extends ListenerAdapter {
                 Message sentMessage = hook.sendMessage("All set—press the button to verify.").addActionRow(
                         Button.success("vb_verify", "Verify")
                 ).complete();
-                messageAndOwner.put(sentMessage.getId(), ownerId);
-                messageAndHook.put(sentMessage.getId(), hook);
+                setMessageOwner(sentMessage.getId(), ownerId);
+                setMessageHook(sentMessage.getId(), hook);
+                break;
+            }
+            case "Reply to this message with a BuildManifest, link to firmware, or iOS version/build.": {
+                String ownerId = messageAndOwner.get(referencedMessage.getId());
+                if (!checkMessageOwner(ownerId, referencedMessage, message, event.getAuthor()))
+                    return;
+
+                InteractionHook hook = messageAndHook.get(referencedMessage.getId());
+
+                // Check for link, then attachment, then iOS version, then build
+                String content = message.getContentRaw();
+                Pattern linkPattern = Pattern.compile("https?:\\/\\/.*?(?=\\s|\\n|$)");
+                Matcher linkMatcher = linkPattern.matcher(content);
+
+                Pattern versionPattern = Pattern.compile("(?<=^)((\\d+\\.?)+)(?=\\s|\\n|$)");
+                Matcher versionMatcher = versionPattern.matcher(content);
+
+                Pattern buildPattern = Pattern.compile("(?<=^)((\\d+|[A-Za-z]+)+)(?=\\s|\\n|$)");
+                Matcher buildMatcher = buildPattern.matcher(content);
+
+                File bmFile = null;
+                String version = null;
+                String build = null;
+                if (linkMatcher.find()) {
+                    String link = linkMatcher.group(0);
+                    Message downloadingBmMessage = hook.sendMessage("Downloading BuildManifest...").complete();
+                    try {
+                        bmFile = getBuildManifestFromUrl(link, ownerId);
+                        if (bmFile == null) {
+                            downloadingBmMessage.editMessage("No BuildManifest found. Check your URL and try again.").queue();
+                            return;
+                        }
+                        downloadingBmMessage.delete().queue();
+                    } catch (Exception e) {
+                        downloadingBmMessage.editMessage("Unable to download BuildManifest from the URL provided.").queue();
+                        return;
+                    }
+                } else if (!attachments.isEmpty()) {
+                    attachments.get(0).downloadToFile("collected/" + ownerId + "_BuildManifest.plist");
+                    bmFile = new File("collected/" + ownerId + "_BuildManifest.plist");
+                } else if (versionMatcher.find()) {
+                    version = versionMatcher.group(1);
+                } else if (buildMatcher.find()) {
+                    build = buildMatcher.group(1);
+                } else {
+                    Message sentMessage = hook.sendMessage("No BuildManifest, valid link, iOS version, or iOS build provided! Please try again.").complete();
+                    message.delete().queueAfter(5, TimeUnit.SECONDS);
+                    sentMessage.delete().queueAfter(5, TimeUnit.SECONDS);
+                    return;
+                }
+
+                HashMap<String, String> tss = userAndTss.get(event.getAuthor().getId());
+                if (bmFile != null)
+                    tss.put("bm", bmFile.getAbsolutePath());
+                if (version != null)
+                    tss.put("version", version);
+                if (build != null)
+                    tss.put("build", build);
+
+                userAndTss.put(event.getAuthor().getId(), tss);
+
+                referencedMessage.delete().queue();
+                event.getMessage().delete().queue();
+                Message sentMessage = hook.sendMessage("All set—press the button to check signing status.").addActionRow(
+                        Button.success("tss_check", "Check TSS")
+                ).complete();
+                setMessageOwner(sentMessage.getId(), ownerId);
+                setMessageHook(sentMessage.getId(), hook);
+
                 break;
             }
         }
@@ -378,11 +561,40 @@ public class Listeners extends ListenerAdapter {
     public static String img4toolVerify(File blob, File bm) throws IOException {
         ProcessBuilder processBuilder = new ProcessBuilder();
         processBuilder.command("img4tool", "--shsh", blob.getAbsolutePath(), "--verify", bm.getAbsolutePath());
-        // Merge stderr  with stdout
+        // Merge stderr with stdout
         processBuilder.redirectErrorStream(true);
         Process process = processBuilder.start();
         InputStream inputStream = process.getInputStream();
-        String result = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
-        return result;
+        return IOUtils.toString(inputStream, StandardCharsets.UTF_8);
+    }
+
+    public static String tssChecker(ArrayList<String> args) throws IOException {
+        ProcessBuilder processBuilder = new ProcessBuilder();
+        processBuilder.command(args);
+
+        // Merge stderr with stdout
+        processBuilder.redirectErrorStream(true);
+        Process process = processBuilder.start();
+        InputStream inputStream = process.getInputStream();
+        return IOUtils.toString(inputStream, StandardCharsets.UTF_8);
+    }
+
+    /* *** UTILITIES *** */
+    public void setMessageOwner(String messageId, String userId) {
+        messageAndOwner.put(messageId, userId);
+    }
+
+    public void setMessageHook(String messageId, InteractionHook hook) {
+        messageAndHook.put(messageId, hook);
+    }
+
+    public boolean checkMessageOwner(String ownerId, Message referencedMessage, Message message, User author) {
+        // No owner for this message where there should be an owner
+        if (ownerId == null) {
+            message.reply("Something went wrong—I forgot who summoned me! Please run `/verifyblob` again.").queue();
+            return false;
+        }
+        // If they're not the owner, return false and ignore them
+        return ownerId.equals(author.getId());
     }
 }
