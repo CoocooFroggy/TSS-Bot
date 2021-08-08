@@ -336,7 +336,7 @@ public class Listeners extends ListenerAdapter {
         switch (referencedMessage.getContentRaw()) {
             case "Reply to this message with your blob file.": {
                 String ownerId = messageAndOwner.get(referencedMessage.getId());
-                if (!checkMessageOwner(ownerId, referencedMessage, message, event.getAuthor()))
+                if (isUserNotOwner(ownerId, message, event.getAuthor()))
                     return;
 
                 if (attachments.isEmpty())
@@ -367,7 +367,7 @@ public class Listeners extends ListenerAdapter {
             }
             case "Reply to this message with a BuildManifest or a firmware link to verify the blob against.": {
                 String ownerId = messageAndOwner.get(referencedMessage.getId());
-                if (!checkMessageOwner(ownerId, referencedMessage, message, event.getAuthor()))
+                if (isUserNotOwner(ownerId, message, event.getAuthor()))
                     return;
 
                 InteractionHook hook = messageAndHook.get(referencedMessage.getId());
@@ -415,7 +415,7 @@ public class Listeners extends ListenerAdapter {
             }
             case "Reply to this message with a BuildManifest, link to firmware, or iOS version/build.": {
                 String ownerId = messageAndOwner.get(referencedMessage.getId());
-                if (!checkMessageOwner(ownerId, referencedMessage, message, event.getAuthor()))
+                if (isUserNotOwner(ownerId, message, event.getAuthor()))
                     return;
 
                 InteractionHook hook = messageAndHook.get(referencedMessage.getId());
@@ -615,13 +615,13 @@ public class Listeners extends ListenerAdapter {
         messageAndHook.put(messageId, hook);
     }
 
-    public boolean checkMessageOwner(String ownerId, Message referencedMessage, Message message, User author) {
+    public boolean isUserNotOwner(String ownerId, Message message, User author) {
         // No owner for this message where there should be an owner
         if (ownerId == null) {
             message.reply("Something went wrong—I forgot who summoned me! Please run `/verifyblob` again.").queue();
-            return false;
+            return true;
         }
-        // If they're not the owner, return false and ignore them
-        return ownerId.equals(author.getId());
+        // If they're not the owner, return true and ignore them
+        return !ownerId.equals(author.getId());
     }
 }
