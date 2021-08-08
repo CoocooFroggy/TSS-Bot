@@ -1,9 +1,6 @@
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.Permission;
-import net.dv8tion.jda.api.entities.GuildChannel;
-import net.dv8tion.jda.api.entities.Message;
-import net.dv8tion.jda.api.entities.MessageEmbed;
-import net.dv8tion.jda.api.entities.User;
+import net.dv8tion.jda.api.entities.*;
 import net.dv8tion.jda.api.events.interaction.ButtonClickEvent;
 import net.dv8tion.jda.api.events.interaction.SlashCommandEvent;
 import net.dv8tion.jda.api.events.message.guild.GuildMessageReceivedEvent;
@@ -38,6 +35,12 @@ public class Listeners extends ListenerAdapter {
     HashMap<String, HashMap<String, File>> userAndFiles = new HashMap<>();
     @Override
     public void onSlashCommand(@NotNull SlashCommandEvent event) {
+        // Disallow threads
+        if (event.getChannel() == null || event.getChannel().getType() == ChannelType.UNKNOWN) {
+            event.reply("Sorry, I don't work with threads yet! Try again in a regular channel.").setEphemeral(true).queue();
+            return;
+        }
+
         switch (event.getName()) {
             case "minfw": {
                 HashMap<String, Object> embedAndButtons = buildFrGuideEmbed("frg_start", event.getUser());
