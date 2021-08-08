@@ -58,7 +58,10 @@ public class Listeners extends ListenerAdapter {
             case "verifyblob": {
                 if (event.getChannel() instanceof GuildChannel) {
                     // If we don't have perms to send message in this channel
-                    if (!PermissionUtil.checkPermission(event.getGuildChannel(), event.getGuild().getSelfMember(), Permission.MESSAGE_WRITE)) {
+                    if (!PermissionUtil.checkPermission(
+                            event.getGuildChannel(),
+                            Objects.requireNonNull(event.getGuild()).getSelfMember(), // Guild is never null, we are in a GuildChannel
+                            Permission.MESSAGE_WRITE)) {
                         event.reply("I don't have permission to send messages in this channel! Try again in another channel.").setEphemeral(true).queue();
                     }
                 }
@@ -89,7 +92,10 @@ public class Listeners extends ListenerAdapter {
             case "tss": {
                 if (event.getChannel() instanceof GuildChannel) {
                     // If we don't have perms to send message in this channel
-                    if (!PermissionUtil.checkPermission(event.getGuildChannel(), event.getGuild().getSelfMember(), Permission.MESSAGE_WRITE)) {
+                    if (!PermissionUtil.checkPermission(
+                            event.getGuildChannel(),
+                            Objects.requireNonNull(event.getGuild()).getSelfMember(), // Guild is never null, we are in a GuildChannel
+                            Permission.MESSAGE_WRITE)) {
                         event.reply("I don't have permission to send messages in this channel! Try again in another channel.").setEphemeral(true).queue();
                     }
                 }
@@ -114,14 +120,14 @@ public class Listeners extends ListenerAdapter {
     @Override
     public void onButtonClick(@NotNull ButtonClickEvent event) {
         User user = event.getUser();
-        String buttonId = event.getButton().getId();
+        String buttonId = Objects.requireNonNull(event.getButton()).getId(); // Button click event... button can never be null
+        assert buttonId != null; // Again, button cannot be null
         if (buttonId.startsWith("frg_")) {
             // If the user who pressed the button isn't the same as the owner of this message, say no
             if (messageAndOwner.get(event.getMessageId()) == null) {
                 event.reply("Something went wrong—I forgot who summoned this menu! Please run `/frguide` again.").setEphemeral(true).queue();
                 return;
-            }
-            else if (!messageAndOwner.get(event.getMessageId()).equals(user.getId())) {
+            } else if (!messageAndOwner.get(event.getMessageId()).equals(user.getId())) {
                 event.reply("This is not your menu! Start your own with `/frguide`.").setEphemeral(true).queue();
                 return;
             }
@@ -139,10 +145,10 @@ public class Listeners extends ListenerAdapter {
                         .setActionRows()
                         .queue();
             }
-        }
-        else if (buttonId.equals("vb_verify")) {
+        } else if (buttonId.equals("vb_verify")) {
             // If the user who pressed the button isn't the same as the owner of this message, say no
-            checkMenuOwner(event, user);
+            if (isNotMenuOwner(event, user))
+                return;
             // Get rid of verify button
             event.getMessage().delete().queue();
             // Start "thinking"
@@ -198,10 +204,10 @@ public class Listeners extends ListenerAdapter {
                         "\n" +
                         "```").queue();
             }
-        }
-        else if (buttonId.equals("tss_check")) {
+        } else if (buttonId.equals("tss_check")) {
             // If the user who pressed the button isn't the same as the owner of this message, say no
-            checkMenuOwner(event, user);
+            if (isNotMenuOwner(event, user))
+                return;
             // Get rid of Check TSS button
             event.getMessage().delete().queue();
             // Start "thinking"
@@ -305,15 +311,15 @@ public class Listeners extends ListenerAdapter {
         }
     }
 
-    private void checkMenuOwner(@NotNull ButtonClickEvent event, User user) {
+    private boolean isNotMenuOwner(@NotNull ButtonClickEvent event, User user) {
         if (messageAndOwner.get(event.getMessageId()) == null) {
             event.reply("Something went wrong—I forgot who summoned this menu! Please run `/verifyblob` again.").setEphemeral(true).queue();
-            return;
-        }
-        else if (!messageAndOwner.get(event.getMessageId()).equals(user.getId())) {
+            return true;
+        } else if (!messageAndOwner.get(event.getMessageId()).equals(user.getId())) {
             event.reply("This is not your menu! Start your own with `/verifyblob`.").setEphemeral(true).queue();
-            return;
+            return true;
         }
+        return false;
     }
 
     @Override
@@ -373,7 +379,7 @@ public class Listeners extends ListenerAdapter {
                 InteractionHook hook = messageAndHook.get(referencedMessage.getId());
 
                 String content = message.getContentRaw();
-                Pattern linkPattern = Pattern.compile("https?:\\/\\/.*?(?=\\s|\\n|$)");
+                Pattern linkPattern = Pattern.compile("https?://.*?(?=\\s|\\n|$)");
                 Matcher linkMatcher = linkPattern.matcher(content);
 
                 File bmFile;
@@ -422,7 +428,7 @@ public class Listeners extends ListenerAdapter {
 
                 // Check for link, then attachment, then iOS version, then build
                 String content = message.getContentRaw();
-                Pattern linkPattern = Pattern.compile("https?:\\/\\/.*?(?=\\s|\\n|$)");
+                Pattern linkPattern = Pattern.compile("https?://.*?(?=\\s|\\n|$)");
                 Matcher linkMatcher = linkPattern.matcher(content);
 
                 Pattern versionPattern = Pattern.compile("(?<=^)((\\d+\\.?)+)(?=\\s|\\n|$)");
@@ -487,8 +493,10 @@ public class Listeners extends ListenerAdapter {
 
     public static HashMap<String, Object> buildFrGuideEmbed(String stage, User user) {
         EmbedBuilder eb = new EmbedBuilder();
-        eb.setTitle("FutureRestore Guide");
+        eb.setTitle("Minimum Firmware");
+        eb.setFooter(user.getName(), user.getAvatarUrl());
         ArrayList<Button> buttons = new ArrayList<>();
+        // @formatter:off
         switch (stage) {
             case "frg_start": {
                 eb.setDescription("What type of device do you have?");
@@ -557,7 +565,34 @@ public class Listeners extends ListenerAdapter {
                         eb.addField("FutureRestore:", "[v2.0.0 beta](https://github.com/m1stadev/futurerestore/actions)", true);
                         break;
                     }
+                case "frg_apple_tv": {
+                    eb.setDescription("What chip does your Apple TV have?");
+                    buttons.add(Button.primary("frg_apple_tv_early", "Apple TV 3 or Earlier"));
+                    buttons.add(Button.primary("frg_apple_tv_hd", "Apple TV HD"));
+                    buttons.add(Button.primary("frg_apple_tv_4k", "Apple TV 4K or later"));
+                    break;
+                }
+                    case "frg_apple_tv_early": {
+                        eb.setTitle("Apple TV — 3rd Gen or earlier");
+                        eb.addField("Can restore to:", "No clue, this TV is older than JTV's mother", true);
+                        eb.addField("FutureRestore:", "[tihmstar](https://github.com/tihmstar/futurerestore/) maybe?", true);
+                        eb.addField("Hotel:", "Trivago", true);
+                        break;
+                    }
+                    case "frg_apple_tv_hd": {
+                        eb.setTitle("Apple TV HD");
+                        eb.addField("Can restore to:", "tvOS 14.0 or later", true);
+                        eb.addField("FutureRestore:", "[v194](https://github.com/m1stadev/futurerestore/releases/tag/194) or later", true);
+                        break;
+                    }
+                    case "frg_apple_tv_4k": {
+                        eb.setTitle("Apple TV — 4K or Later");
+                        eb.addField("Restoring:", "Cannot restore, no public iPSWs available.", true);
+                        eb.addField("FutureRestore:", "You'd need a special cable for the computer to even recognize the device. Also, 4K gen 2 has nonce entanglement. Good luck setting a generator and saving blobs lol", true);
+                        break;
+                    }
         }
+        // @formatter:on
         HashMap<String, Object> embedAndButtons = new HashMap<>();
         embedAndButtons.put("embed", eb.build());
         embedAndButtons.put("buttons", buttons);
