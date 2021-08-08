@@ -41,10 +41,12 @@ public class Main {
         jda.upsertCommand("bm", "Get a BuildManifest from an iPSW or OTA URL.")
                 .addOption(OptionType.STRING, "url", "URL of iPSW or OTA firmware.", true)
                 .complete();
-                */
+
+         */
         jda.upsertCommand("tss", "Check signing status of an iOS version.")
-                .addOption(OptionType.STRING, "device", "Identifier of device (EG `iPhone11,8`)", true)
+                .addOption(OptionType.STRING, "device", "Identifier of device (EG iPhone11,8)", true)
                 .complete();
+
     }
     
     public static void main(String[] args) {

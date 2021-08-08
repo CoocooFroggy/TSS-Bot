@@ -87,6 +87,13 @@ public class Listeners extends ListenerAdapter {
                 break;
             }
             case "tss": {
+                if (event.getChannel() instanceof GuildChannel) {
+                    // If we don't have perms to send message in this channel
+                    if (!PermissionUtil.checkPermission(event.getGuildChannel(), event.getGuild().getSelfMember(), Permission.MESSAGE_WRITE)) {
+                        event.reply("I don't have permission to send messages in this channel! Try again in another channel.").setEphemeral(true).queue();
+                    }
+                }
+
                 // Required arg so always not null
                 String deviceIdentifier = Objects.requireNonNull(event.getOption("device")).getAsString();
 
@@ -261,8 +268,28 @@ public class Listeners extends ListenerAdapter {
                 if (result.contains("checking tss status failed!")) {
                     eb.setColor(new Color(16753152));
                 } else if (result.contains("IS being signed!")) {
+                    // Fancy parsing, no terminal output
+                    eb.setTitle("Signed");
+                    eb.setDescription("");
+                    Pattern versionPattern = Pattern.compile("(?<=Firmware version )(.*?) (.*)(?= IS)");
+                    Matcher versionMatcher = versionPattern.matcher(result);
+                    if (versionMatcher.find()) {
+                        // Version: 14.7 (18G69)
+                        eb.addField("Version: " + versionMatcher.group(1) + " (" + versionMatcher.group(2) + ")", versionMatcher.group(2), true);
+                        eb.addField("Device: ", device, true);
+                    }
                     eb.setColor(new Color(708352));
                 } else if (result.contains("IS NOT being signed!")) {
+                    // Fancy parsing, no terminal output
+                    eb.setTitle("Unsigned");
+                    eb.setDescription("");
+                    Pattern versionPattern = Pattern.compile("(?<=Firmware version )(.*?) (.*)(?= IS)");
+                    Matcher versionMatcher = versionPattern.matcher(result);
+                    if (versionMatcher.find()) {
+                        // Version: 14.7 (18G69)
+                        eb.addField("Version: " + versionMatcher.group(1) + " (" + versionMatcher.group(2) + ")", versionMatcher.group(2), true);
+                        eb.addField("Device: ", device, true);
+                    }
                     eb.setColor(new Color(16711680));
                 }
 
