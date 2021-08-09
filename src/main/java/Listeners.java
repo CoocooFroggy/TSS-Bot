@@ -281,7 +281,7 @@ public class Listeners extends ListenerAdapter {
                     Matcher versionMatcher = versionPattern.matcher(result);
                     if (versionMatcher.find()) {
                         // Version: 14.7 (18G69)
-                        eb.addField("Version: " + versionMatcher.group(1) + " (" + versionMatcher.group(2) + ")", versionMatcher.group(2), true);
+                        eb.addField("Version:", versionMatcher.group(1) + " (" + versionMatcher.group(2) + ")", true);
                         eb.addField("Device: ", device, true);
                     }
                     eb.setColor(new Color(708352));
@@ -293,8 +293,8 @@ public class Listeners extends ListenerAdapter {
                     Matcher versionMatcher = versionPattern.matcher(result);
                     if (versionMatcher.find()) {
                         // Version: 14.7 (18G69)
-                        eb.addField("Version: " + versionMatcher.group(1) + " (" + versionMatcher.group(2) + ")", versionMatcher.group(2), true);
-                        eb.addField("Device: ", device, true);
+                        eb.addField("Version:", versionMatcher.group(1) + " (" + versionMatcher.group(2) + ")", true);
+                        eb.addField("Device:", device, true);
                     }
                     eb.setColor(new Color(16711680));
                 }
@@ -390,11 +390,15 @@ public class Listeners extends ListenerAdapter {
                         bmFile = getBuildManifestFromUrl(link, ownerId);
                         if (bmFile == null) {
                             downloadingBmMessage.editMessage("No BuildManifest found. Check your URL and try again.").queue();
+                            downloadingBmMessage.delete().queueAfter(5, TimeUnit.SECONDS);
+                            message.delete().queueAfter(5, TimeUnit.SECONDS);
                             return;
                         }
                         downloadingBmMessage.delete().queue();
                     } catch (Exception e) {
-                        downloadingBmMessage.editMessage("Unable to download BuildManifest from the URL provided.").queue();
+                        downloadingBmMessage.editMessage("Unable to download BuildManifest from the URL provided. Try again.").queue();
+                        downloadingBmMessage.delete().queueAfter(5, TimeUnit.SECONDS);
+                        message.delete().queueAfter(5, TimeUnit.SECONDS);
                         return;
                     }
                 } else if (!attachments.isEmpty()) {
@@ -522,13 +526,13 @@ public class Listeners extends ListenerAdapter {
                     case "frg_iphone_a11": {
                         eb.setTitle("iPhone — A11");
                         eb.addField("Can restore to:", "iOS 14.3 or later", true);
-                        eb.addField("FutureRestore:", "[v2.0.0 beta](https://github.com/m1stadev/futurerestore/actions)", true);
+                        eb.addField("FutureRestore:", "[v2.0.0 beta](https://nightly.link/m1stadev/futurerestore/workflows/ci/test)", true);
                         break;
                     }
                     case "frg_iphone_a12_or_later": {
                         eb.setTitle("iPhone — A12 or later");
                         eb.addField("Can restore to:", "iOS 14.0 or later", true);
-                        eb.addField("FutureRestore:", "[v2.0.0 beta](https://github.com/m1stadev/futurerestore/actions)", true);
+                        eb.addField("FutureRestore:", "[v2.0.0 beta](https://nightly.link/m1stadev/futurerestore/workflows/ci/test)", true);
                         break;
                     }
                 case "frg_ipad": {
@@ -540,13 +544,13 @@ public class Listeners extends ListenerAdapter {
                     case "frg_ipad_a10_or_earlier": {
                         eb.setTitle("iPad — A10 or earlier");
                         eb.addField("Can restore to:", "iOS 14.0 or later", true);
-                        eb.addField("FutureRestore:", "[v2.0.0 beta](https://github.com/m1stadev/futurerestore/actions)", true);
+                        eb.addField("FutureRestore:", "[v2.0.0 beta](https://nightly.link/m1stadev/futurerestore/workflows/ci/test)", true);
                         break;
                     }
                     case "frg_ipad_a12_or_later": {
                         eb.setTitle("iPad — A12 or later");
                         eb.addField("Can restore to:", "iOS 14.0 or later", true);
-                        eb.addField("FutureRestore:", "[v2.0.0 beta](https://github.com/m1stadev/futurerestore/actions)", true);
+                        eb.addField("FutureRestore:", "[v2.0.0 beta](https://nightly.link/m1stadev/futurerestore/workflows/ci/test)", true);
                         break;
                     }
                 case "frg_ipod": {
@@ -557,12 +561,12 @@ public class Listeners extends ListenerAdapter {
                     case "frg_ipod_a10_or_earlier": {
                         eb.setTitle("iPod — A10 or earlier");
                         eb.addField("Can restore to:", "iOS 14.0 or later", true);
-                        eb.addField("FutureRestore:", "[v2.0.0 beta](https://github.com/m1stadev/futurerestore/actions)", true);
+                        eb.addField("FutureRestore:", "[v2.0.0 beta](https://nightly.link/m1stadev/futurerestore/workflows/ci/test)", true);
                         break;
                     }
                     case "frg_ipod_a12_or_later": {
                         eb.addField("Can restore to:", "iOS 14.0 or later", true);
-                        eb.addField("FutureRestore:", "[v2.0.0 beta](https://github.com/m1stadev/futurerestore/actions)", true);
+                        eb.addField("FutureRestore:", "[v2.0.0 beta](https://nightly.link/m1stadev/futurerestore/workflows/ci/test)", true);
                         break;
                     }
                 case "frg_apple_tv": {
