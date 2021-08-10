@@ -150,9 +150,8 @@ public class Listeners extends ListenerAdapter {
             if (isNotMenuOwner(event, user))
                 return;
             // Get rid of verify button
-            event.getMessage().delete().queue();
-            // Start "thinking"
-            InteractionHook hook = event.deferReply().complete();
+            event.getInteraction().editComponents().queue();
+            Message runningMessage = event.getMessage().editMessage("Running img4tool...").complete();
 
             File blob = userAndFiles.get(user.getId()).get("blob");
             File bm = userAndFiles.get(user.getId()).get("bm");
@@ -195,10 +194,11 @@ public class Listeners extends ListenerAdapter {
                     eb.setColor(new Color(16711680));
                 }
 
-                hook.sendMessageEmbeds(eb.build()).queue();
+                runningMessage.editMessage(eb.build()).queue();
+                runningMessage.editMessage(" ").queue();
             } catch (IOException e) {
                 e.printStackTrace();
-                hook.editOriginal("Failed to run img4tool. Stack trace:\n" +
+                runningMessage.editMessage("Failed to run img4tool. Stack trace:\n" +
                         "```\n" +
                         Arrays.toString(e.getStackTrace()) +
                         "\n" +
@@ -208,10 +208,12 @@ public class Listeners extends ListenerAdapter {
             // If the user who pressed the button isn't the same as the owner of this message, say no
             if (isNotMenuOwner(event, user))
                 return;
-            // Get rid of Check TSS button
-            event.getMessage().delete().queue();
+            /*// Get rid of Check TSS button
+            event.getMessage().delete().queue();*/
+
+            event.getInteraction().editComponents().complete();
             // Start "thinking"
-            InteractionHook hook = event.deferReply().complete();
+            Message runningMessage = event.getMessage().editMessage("Running tsschecker...").complete();
 
             HashMap<String, String> tss = userAndTss.get(user.getId());
 
@@ -277,11 +279,14 @@ public class Listeners extends ListenerAdapter {
                     // Fancy parsing, no terminal output
                     eb.setTitle("Signed");
                     eb.setDescription("");
-                    Pattern versionPattern = Pattern.compile("(?<=Firmware version )(.*?) (.*)(?= IS)");
+                    Pattern versionPattern = Pattern.compile("(.*?) (.*?) for device (.*)(?= IS being signed!)");
                     Matcher versionMatcher = versionPattern.matcher(result);
                     if (versionMatcher.find()) {
-                        // Version: 14.7 (18G69)
-                        eb.addField("Version:", versionMatcher.group(1) + " (" + versionMatcher.group(2) + ")", true);
+                        String vPrefix = "Version:";
+                        if (versionMatcher.group(1).equals("Build"))
+                            vPrefix = "Build:";
+                        // Version: 14.7 OR Build: 18G68
+                        eb.addField(vPrefix, versionMatcher.group(2), true);
                         eb.addField("Device: ", device, true);
                     }
                     eb.setColor(new Color(708352));
@@ -289,20 +294,25 @@ public class Listeners extends ListenerAdapter {
                     // Fancy parsing, no terminal output
                     eb.setTitle("Unsigned");
                     eb.setDescription("");
-                    Pattern versionPattern = Pattern.compile("(?<=Firmware version )(.*?) (.*)(?= IS)");
+                    Pattern versionPattern = Pattern.compile("(.*?) (.*?) for device (.*)(?= IS NOT being signed!)");
                     Matcher versionMatcher = versionPattern.matcher(result);
                     if (versionMatcher.find()) {
-                        // Version: 14.7 (18G69)
-                        eb.addField("Version:", versionMatcher.group(1) + " (" + versionMatcher.group(2) + ")", true);
-                        eb.addField("Device:", device, true);
+                        String vPrefix = "Version:";
+                        if (versionMatcher.group(1).equals("Build"))
+                            vPrefix = "Build:";
+                        // Version: 14.7 OR Build: 18G68
+                        eb.addField(vPrefix, versionMatcher.group(2), true);
+                        eb.addField("Device: ", device, true);
                     }
                     eb.setColor(new Color(16711680));
                 }
 
-                hook.sendMessageEmbeds(eb.build()).queue();
+
+                runningMessage.editMessage(eb.build()).complete();
+                runningMessage.editMessage(" ").queue();
             } catch (IOException e) {
                 e.printStackTrace();
-                hook.editOriginal("Failed to run tsschecker. Stack trace:\n" +
+                runningMessage.editMessage("Failed to run tsschecker. Stack trace:\n" +
                         "```\n" +
                         Arrays.toString(e.getStackTrace()) +
                         "\n" +
@@ -363,10 +373,9 @@ public class Listeners extends ListenerAdapter {
                 files.put("blob", blobFile);
                 userAndFiles.put(ownerId, files);
 
-                referencedMessage.delete().queue();
                 event.getMessage().delete().queue();
 
-                Message sentMessage = hook.sendMessage("Reply to this message with a BuildManifest or a firmware link to verify the blob against.").complete();
+                Message sentMessage = hook.editOriginal("Reply to this message with a BuildManifest or a firmware link to verify the blob against.").complete();
                 setMessageOwner(sentMessage.getId(), event.getAuthor().getId());
                 setMessageHook(sentMessage.getId(), hook);
                 break;
@@ -414,9 +423,8 @@ public class Listeners extends ListenerAdapter {
                 files.put("bm", bmFile);
                 userAndFiles.put(ownerId, files);
 
-                referencedMessage.delete().queue();
                 event.getMessage().delete().queue();
-                Message sentMessage = hook.sendMessage("All set—press the button to verify.").addActionRow(
+                Message sentMessage = hook.editOriginal("All set—press the button to verify.").setActionRow(
                         Button.success("vb_verify", "Verify")
                 ).complete();
                 setMessageOwner(sentMessage.getId(), ownerId);
@@ -451,11 +459,13 @@ public class Listeners extends ListenerAdapter {
                         bmFile = getBuildManifestFromUrl(link, ownerId);
                         if (bmFile == null) {
                             downloadingBmMessage.editMessage("No BuildManifest found. Check your URL and try again.").queue();
+                            downloadingBmMessage.delete().queueAfter(5, TimeUnit.SECONDS);
                             return;
                         }
                         downloadingBmMessage.delete().queue();
                     } catch (Exception e) {
                         downloadingBmMessage.editMessage("Unable to download BuildManifest from the URL provided.").queue();
+                        downloadingBmMessage.delete().queueAfter(5, TimeUnit.SECONDS);
                         return;
                     }
                 } else if (!attachments.isEmpty()) {
@@ -482,9 +492,8 @@ public class Listeners extends ListenerAdapter {
 
                 userAndTss.put(event.getAuthor().getId(), tss);
 
-                referencedMessage.delete().queue();
                 event.getMessage().delete().queue();
-                Message sentMessage = hook.sendMessage("All set—press the button to check signing status.").addActionRow(
+                Message sentMessage = hook.editOriginal("All set—press the button to check signing status.").setActionRow(
                         Button.success("tss_check", "Check TSS")
                 ).complete();
                 setMessageOwner(sentMessage.getId(), ownerId);
