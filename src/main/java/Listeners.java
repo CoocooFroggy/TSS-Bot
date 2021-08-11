@@ -150,7 +150,7 @@ public class Listeners extends ListenerAdapter {
             if (isNotMenuOwner(event, user))
                 return;
             // Get rid of verify button
-            event.getInteraction().editComponents().queue();
+            event.getInteraction().editComponents().complete();
             Message runningMessage = event.getMessage().editMessage("Running img4tool...").complete();
 
             File blob = userAndFiles.get(user.getId()).get("blob");
@@ -189,9 +189,30 @@ public class Listeners extends ListenerAdapter {
                 if (result.contains("img4tool: failed with exception:")) {
                     eb.setColor(new Color(16753152));
                 } else if (result.contains("[IMG4TOOL] APTicket is GOOD!")) {
-                    eb.setColor(new Color(708352));
+                    eb
+                            .setTitle("APTicket is GOOD")
+                            .setDescription("")
+                            .setColor(new Color(708352));
                 } else if (result.contains("[IMG4TOOL] APTicket is BAD!")) {
-                    eb.setColor(new Color(16711680));
+                    eb
+                            .setTitle("APTicket is BAD")
+                            .setDescription("")
+                            .setColor(new Color(16711680));
+                }
+
+                // Variant : Customer Erase Install (IPSW)
+                // DeviceClass : n112ap
+                // etc.
+                System.out.println(result);
+                Pattern pattern = Pattern.compile("(.*) : (.*)");
+                Matcher matcher = pattern.matcher(result);
+                while (matcher.find()) {
+                    eb.addField(matcher.group(1) + ":", matcher.group(2), true);
+                }
+                pattern = Pattern.compile("(?<=\\[exception\\]:\\nwhat=).*");
+                matcher = pattern.matcher(result);
+                while (matcher.find()) {
+                    eb.addField("Exception:", matcher.group(0), true);
                 }
 
                 runningMessage.editMessage(eb.build()).queue();
