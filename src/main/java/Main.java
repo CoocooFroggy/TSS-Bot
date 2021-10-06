@@ -38,6 +38,9 @@ public class Main {
 
 
          */
+        jda.deleteCommandById("minfw").complete();
+        
+        /*
         jda.upsertCommand("minfw", "Find limits to the versions you can FutureRestore to.").complete();
         jda.upsertCommand("verifyblob", "Verify a blob with img4tool.").complete();
         jda.upsertCommand("bm", "Get a BuildManifest from an iPSW or OTA URL.")
@@ -46,6 +49,7 @@ public class Main {
         jda.upsertCommand("tss", "Check signing status of an iOS version.")
                 .addOption(OptionType.STRING, "device", "Identifier of device (EG iPhone11,8)", true)
                 .complete();
+                */
 
     }
     
