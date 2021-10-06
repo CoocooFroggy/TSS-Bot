@@ -29,16 +29,21 @@ public class Main {
     public static void registerSlashCommands() {
 //        Guild testGuild = jda.getGuildById("685606700929384489");
 //        assert testGuild != null;
-
+        
+        // Delete all commands
         /*
         List<Command> commands = jda.retrieveCommands().complete();
         for (Command command : commands) {
             command.delete().complete();
         }
-
-
-         */
-        jda.deleteCommandById("minfw").complete();
+        */
+        
+        List<Command> commands = jda.retrieveCommands().complete();
+        for (Command command : commands) {
+            if (command.getName().equals("minfw")) {
+                command.delete().complete();
+            }
+        }
         
         /*
         jda.upsertCommand("minfw", "Find limits to the versions you can FutureRestore to.").complete();
@@ -50,6 +55,7 @@ public class Main {
                 .addOption(OptionType.STRING, "device", "Identifier of device (EG iPhone11,8)", true)
                 .complete();
                 */
+                
 
     }
     
