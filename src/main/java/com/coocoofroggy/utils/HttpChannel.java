@@ -1,3 +1,5 @@
+package com.coocoofroggy.utils;
+
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLConnection;

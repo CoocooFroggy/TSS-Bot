@@ -1,13 +1,17 @@
+package com.coocoofroggy.utils;
+
+import com.coocoofroggy.Main;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.Permission;
-import net.dv8tion.jda.api.entities.*;
-import net.dv8tion.jda.api.events.interaction.ButtonClickEvent;
-import net.dv8tion.jda.api.events.interaction.SlashCommandEvent;
-import net.dv8tion.jda.api.events.message.guild.GuildMessageReceivedEvent;
+import net.dv8tion.jda.api.entities.GuildChannel;
+import net.dv8tion.jda.api.entities.Message;
+import net.dv8tion.jda.api.entities.User;
+import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
+import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.InteractionHook;
-import net.dv8tion.jda.api.interactions.components.ActionRow;
-import net.dv8tion.jda.api.interactions.components.Button;
+import net.dv8tion.jda.api.interactions.components.buttons.Button;
 import net.dv8tion.jda.internal.utils.PermissionUtil;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipFile;
@@ -22,61 +26,102 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
 import java.util.List;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class Listeners extends ListenerAdapter {
 
-    HashMap<String, InteractionHook> messageAndHook = new HashMap<>();
-    HashMap<String, String> messageAndOwner = new HashMap<>();
-    HashMap<String, HashMap<String, File>> userAndFiles = new HashMap<>();
-    HashMap<String, HashMap<String, String>> userAndTss = new HashMap<>();
+    final HashMap<String, InteractionHook> messageAndHook = new HashMap<>();
+    final HashMap<String, String> messageAndOwner = new HashMap<>();
+    final HashMap<String, HashMap<String, File>> userAndFiles = new HashMap<>();
+    final HashMap<String, HashMap<String, String>> userAndTss = new HashMap<>();
 
-    @Override
-    public void onSlashCommand(@NotNull SlashCommandEvent event) {
-        // Disallow threads
-        if (event.getChannel() == null || event.getChannel().getType() == ChannelType.UNKNOWN) {
-            event.reply("Sorry, I don't work with threads yet! Try again in a regular channel.").setEphemeral(true).queue();
-            return;
+    public static File getBuildManifestFromUrl(String urlString, String userId) throws Exception {
+        URL url = new URL(urlString);
+        String pathToSave = "collected/" + userId + "_BuildManifest.plist";
+
+        // Thanks to airsquared for finding this com.coocoofroggy.utils.HttpChannel
+        ZipFile ipsw = new ZipFile(new HttpChannel(url), "ipsw", "UTF8", true, true);
+        ZipArchiveEntry bmEntry = ipsw.getEntry("BuildManifest.plist");
+        if (bmEntry == null) {
+            bmEntry = ipsw.getEntry("AssetData/boot/BuildManifest.plist");
+            if (bmEntry == null) {
+                return null;
+            }
         }
 
+        InputStream buildManifestInputStream = ipsw.getInputStream(bmEntry);
+        File buildManifest = new File(pathToSave);
+        FileUtils.copyInputStreamToFile(buildManifestInputStream, buildManifest);
+
+        return new File(pathToSave);
+    }
+
+    public static String img4toolVerify(File blob, File bm) throws IOException {
+        ProcessBuilder processBuilder = new ProcessBuilder();
+        processBuilder.command("img4tool", "--shsh", blob.getAbsolutePath(), "--verify", bm.getAbsolutePath());
+        // Merge stderr with stdout
+        processBuilder.redirectErrorStream(true);
+        Process process = processBuilder.start();
+        InputStream inputStream = process.getInputStream();
+        return IOUtils.toString(inputStream, StandardCharsets.UTF_8);
+    }
+
+    public static String tssChecker(ArrayList<String> args) throws IOException {
+        ProcessBuilder processBuilder = new ProcessBuilder();
+        processBuilder.command(args);
+
+        // Merge stderr with stdout
+        processBuilder.redirectErrorStream(true);
+        Process process = processBuilder.start();
+        InputStream inputStream = process.getInputStream();
+        return IOUtils.toString(inputStream, StandardCharsets.UTF_8);
+    }
+
+    @Override
+    public void onSlashCommandInteraction(@NotNull SlashCommandInteractionEvent event) {
+        String userId = event.getUser().getId();
         switch (event.getName()) {
-            case "minfw": {
-                HashMap<String, Object> embedAndButtons = buildMinFwMenu("frg_start", event.getUser());
-                ActionRow actionRow = ActionRow.of((Collection<Button>) embedAndButtons.get("buttons"));
-                InteractionHook hook = event.replyEmbeds((MessageEmbed) embedAndButtons.get("embed"))
-                        .addActionRows(actionRow)
-                        .complete();
-                Message sentMessage = hook.retrieveOriginal().complete();
-                setMessageHook(sentMessage.getId(), hook);
-                setMessageOwner(sentMessage.getId(), event.getUser().getId());
-                break;
-            }
-            case "verifyblob": {
+            case "verifyblob" -> {
                 if (event.getChannel() instanceof GuildChannel) {
                     // If we don't have perms to send message in this channel
                     if (!PermissionUtil.checkPermission(
-                            event.getGuildChannel(),
+                            event.getGuildChannel().getPermissionContainer(),
                             Objects.requireNonNull(event.getGuild()).getSelfMember(), // Guild is never null, we are in a GuildChannel
-                            Permission.MESSAGE_WRITE)) {
+                            Permission.MESSAGE_SEND)) {
                         event.reply("I don't have permission to send messages in this channel! Try again in another channel.").setEphemeral(true).queue();
                     }
                 }
-                InteractionHook hook = event.reply("Reply to this message with your blob file.").complete();
+
+                Message.Attachment attachment = Objects.requireNonNull(event.getOption("blob")).getAsAttachment(); // Required arg
+
+//                InteractionHook hook = event.reply("Reply to this message with your blob file.").complete();
+//                Message sentMessage = hook.retrieveOriginal().complete();
+//                setMessageHook(sentMessage.getId(), hook);
+//                setMessageOwner(sentMessage.getId(), event.getUser().getId());
+
+                File blobFile = new File("collected/" + userId + ".shsh2");
+
+                attachment.downloadToFile(blobFile).complete(blobFile);
+
+                HashMap<String, File> files = new HashMap<>();
+                files.put("blob", blobFile);
+                userAndFiles.put(userId, files);
+
+                InteractionHook hook = event.reply("Reply to this message with a BuildManifest or a firmware link to verify the blob against.").complete();
                 Message sentMessage = hook.retrieveOriginal().complete();
                 setMessageHook(sentMessage.getId(), hook);
                 setMessageOwner(sentMessage.getId(), event.getUser().getId());
-                break;
             }
-            case "bm": {
+            case "bm" -> {
                 String url = Objects.requireNonNull(event.getOption("url")).getAsString();
                 InteractionHook hook = event.deferReply().complete();
                 File bm;
                 try {
-                    bm = getBuildManifestFromUrl(url, event.getUser().getId());
+                    bm = getBuildManifestFromUrl(url, userId);
                     if (bm == null) {
                         hook.sendMessage("No BuildManifest found. Check your URL and try again.").queue();
                         return;
@@ -87,15 +132,14 @@ public class Listeners extends ListenerAdapter {
                     return;
                 }
                 hook.sendFile(bm).queue();
-                break;
             }
-            case "tss": {
+            case "tss" -> {
                 if (event.getChannel() instanceof GuildChannel) {
                     // If we don't have perms to send message in this channel
                     if (!PermissionUtil.checkPermission(
-                            event.getGuildChannel(),
+                            event.getGuildChannel().getPermissionContainer(),
                             Objects.requireNonNull(event.getGuild()).getSelfMember(), // Guild is never null, we are in a GuildChannel
-                            Permission.MESSAGE_WRITE)) {
+                            Permission.MESSAGE_SEND)) {
                         event.reply("I don't have permission to send messages in this channel! Try again in another channel.").setEphemeral(true).queue();
                     }
                 }
@@ -105,47 +149,26 @@ public class Listeners extends ListenerAdapter {
 
                 HashMap<String, String> tssData = new HashMap<>();
                 tssData.put("device", deviceIdentifier);
-                userAndTss.put(event.getUser().getId(), tssData);
+                userAndTss.put(userId, tssData);
 
-                InteractionHook hook = event.reply("Reply to this message with a BuildManifest, link to firmware, or iOS version/build.").complete();
+                InteractionHook hook = event
+                        .reply("Reply to this message with a BuildManifest, link to firmware, or iOS version/build.")
+                        .addActionRow()
+                        .complete();
                 Message sentMessage = hook.retrieveOriginal().complete();
                 setMessageHook(sentMessage.getId(), hook);
-                setMessageOwner(sentMessage.getId(), event.getUser().getId());
+                setMessageOwner(sentMessage.getId(), userId);
 
-                break;
             }
         }
     }
 
     @Override
-    public void onButtonClick(@NotNull ButtonClickEvent event) {
+    public void onButtonInteraction(@NotNull ButtonInteractionEvent event) {
         User user = event.getUser();
         String buttonId = Objects.requireNonNull(event.getButton()).getId(); // Button click event... button can never be null
         assert buttonId != null; // Again, button cannot be null
-        if (buttonId.startsWith("frg_")) {
-            // If the user who pressed the button isn't the same as the owner of this message, say no
-            if (messageAndOwner.get(event.getMessageId()) == null) {
-                event.reply("Something went wrong—I forgot who summoned this menu! Please run `/minfw` again.").setEphemeral(true).queue();
-                return;
-            } else if (!messageAndOwner.get(event.getMessageId()).equals(user.getId())) {
-                event.reply("This is not your menu! Start your own with `/minfw`.").setEphemeral(true).queue();
-                return;
-            }
-
-            HashMap<String, Object> embedAndButtons = buildMinFwMenu(buttonId, user);
-            Collection<Button> buttonCollection = (Collection<Button>) embedAndButtons.get("buttons");
-            if (!buttonCollection.isEmpty()) {
-                // Maybe check to make sure there's not more than 5 buttons
-                ActionRow actionRow = ActionRow.of(buttonCollection);
-                event.editMessageEmbeds((MessageEmbed) embedAndButtons.get("embed"))
-                        .setActionRows(actionRow)
-                        .queue();
-            } else {
-                event.editMessageEmbeds((MessageEmbed) embedAndButtons.get("embed"))
-                        .setActionRows()
-                        .queue();
-            }
-        } else if (buttonId.equals("vb_verify")) {
+        if (buttonId.equals("vb_verify")) {
             // If the user who pressed the button isn't the same as the owner of this message, say no
             if (isNotMenuOwner(event, user))
                 return;
@@ -176,16 +199,14 @@ public class Listeners extends ListenerAdapter {
                     amountToSubstring = result.length() - 1500;
                 }
 
-                StringBuilder stringBuilder = new StringBuilder();
-                stringBuilder
-                        .append("```")
-                        .append(StringUtils.join(firstLines, "\n"))
-                        .append(result.substring(amountToSubstring))
-                        .append("```");
+                String log = "```" +
+                        StringUtils.join(firstLines, "\n") +
+                        result.substring(amountToSubstring) +
+                        "```";
 
                 EmbedBuilder eb = new EmbedBuilder();
                 eb.setFooter(user.getName(), user.getAvatarUrl());
-                eb.setDescription(stringBuilder.toString());
+                eb.setDescription(log);
                 if (result.contains("img4tool: failed with exception:")) {
                     eb.setColor(new Color(16753152));
                 } else if (result.contains("[IMG4TOOL] APTicket is GOOD!")) {
@@ -209,13 +230,13 @@ public class Listeners extends ListenerAdapter {
                 while (matcher.find()) {
                     eb.addField(matcher.group(1) + ":", matcher.group(2), true);
                 }
-                pattern = Pattern.compile("(?<=\\[exception\\]:\\nwhat=).*");
+                pattern = Pattern.compile("(?<=\\[exception]:\\nwhat=).*");
                 matcher = pattern.matcher(result);
                 while (matcher.find()) {
                     eb.addField("Exception:", matcher.group(0), true);
                 }
 
-                runningMessage.editMessage(eb.build()).queue();
+                runningMessage.editMessageEmbeds(eb.build()).queue();
                 runningMessage.editMessage(" ").queue();
             } catch (IOException e) {
                 e.printStackTrace();
@@ -284,16 +305,14 @@ public class Listeners extends ListenerAdapter {
                     amountToSubstring = result.length() - 1500;
                 }
 
-                StringBuilder stringBuilder = new StringBuilder();
-                stringBuilder
-                        .append("```")
-                        .append(StringUtils.join(firstLines, "\n"))
-                        .append(result.substring(amountToSubstring))
-                        .append("```");
+                String log = "```" +
+                        StringUtils.join(firstLines, "\n") +
+                        result.substring(amountToSubstring) +
+                        "```";
 
                 EmbedBuilder eb = new EmbedBuilder();
                 eb.setFooter(user.getName(), user.getAvatarUrl());
-                eb.setDescription(stringBuilder.toString());
+                eb.setDescription(log);
                 if (result.contains("checking tss status failed!")) {
                     eb.setColor(new Color(16753152));
                 } else if (result.contains("IS being signed!")) {
@@ -329,7 +348,7 @@ public class Listeners extends ListenerAdapter {
                 }
 
 
-                runningMessage.editMessage(eb.build()).complete();
+                runningMessage.editMessageEmbeds(eb.build()).complete();
                 runningMessage.editMessage(" ").queue();
             } catch (IOException e) {
                 e.printStackTrace();
@@ -342,7 +361,7 @@ public class Listeners extends ListenerAdapter {
         }
     }
 
-    private boolean isNotMenuOwner(@NotNull ButtonClickEvent event, User user) {
+    private boolean isNotMenuOwner(@NotNull ButtonInteractionEvent event, User user) {
         if (messageAndOwner.get(event.getMessageId()) == null) {
             event.reply("Something went wrong—I forgot who summoned this menu! Please run `/verifyblob` again.").setEphemeral(true).queue();
             return true;
@@ -354,8 +373,8 @@ public class Listeners extends ListenerAdapter {
     }
 
     @Override
-    public void onGuildMessageReceived(@NotNull GuildMessageReceivedEvent event) {
-        if (event.getAuthor().isBot())
+    public void onMessageReceived(@NotNull MessageReceivedEvent event) {
+        if (!event.isFromGuild() || event.getAuthor().isBot())
             return;
 
         Message message = event.getMessage();
@@ -371,37 +390,7 @@ public class Listeners extends ListenerAdapter {
             return;
 
         switch (referencedMessage.getContentRaw()) {
-            case "Reply to this message with your blob file.": {
-                String ownerId = messageAndOwner.get(referencedMessage.getId());
-                if (isUserNotOwner(ownerId, message, event.getAuthor()))
-                    return;
-
-                if (attachments.isEmpty())
-                    break;
-                InteractionHook hook = messageAndHook.get(referencedMessage.getId());
-                File blobFile = new File("collected/" + ownerId + ".shsh2");
-
-                attachments.get(0).downloadToFile(blobFile)
-                        .thenAccept(file -> System.out.println("Saved attachment to " + file.getName()))
-                        .exceptionally(t ->
-                        { // handle failure
-                            hook.sendMessage("Unable to save blob file. Please try again.").queue();
-                            t.printStackTrace();
-                            return null;
-                        });
-
-                HashMap<String, File> files = new HashMap<>();
-                files.put("blob", blobFile);
-                userAndFiles.put(ownerId, files);
-
-                event.getMessage().delete().queue();
-
-                Message sentMessage = hook.editOriginal("Reply to this message with a BuildManifest or a firmware link to verify the blob against.").complete();
-                setMessageOwner(sentMessage.getId(), event.getAuthor().getId());
-                setMessageHook(sentMessage.getId(), hook);
-                break;
-            }
-            case "Reply to this message with a BuildManifest or a firmware link to verify the blob against.": {
+            case "Reply to this message with a BuildManifest or a firmware link to verify the blob against." -> {
                 String ownerId = messageAndOwner.get(referencedMessage.getId());
                 if (isUserNotOwner(ownerId, message, event.getAuthor()))
                     return;
@@ -450,9 +439,8 @@ public class Listeners extends ListenerAdapter {
                 ).complete();
                 setMessageOwner(sentMessage.getId(), ownerId);
                 setMessageHook(sentMessage.getId(), hook);
-                break;
             }
-            case "Reply to this message with a BuildManifest, link to firmware, or iOS version/build.": {
+            case "Reply to this message with a BuildManifest, link to firmware, or iOS version/build." -> {
                 String ownerId = messageAndOwner.get(referencedMessage.getId());
                 if (isUserNotOwner(ownerId, message, event.getAuthor()))
                     return;
@@ -520,162 +508,10 @@ public class Listeners extends ListenerAdapter {
                 setMessageOwner(sentMessage.getId(), ownerId);
                 setMessageHook(sentMessage.getId(), hook);
 
-                break;
             }
         }
     }
 
-    public static HashMap<String, Object> buildMinFwMenu(String stage, User user) {
-        EmbedBuilder eb = new EmbedBuilder();
-        eb.setTitle("Minimum Firmware");
-        eb.setFooter(user.getName(), user.getAvatarUrl());
-        ArrayList<Button> buttons = new ArrayList<>();
-        // @formatter:off
-        switch (stage) {
-            case "frg_start": {
-                eb.setDescription("What type of device do you have?");
-                buttons.add(Button.primary("frg_iphone", "iPhone"));
-                buttons.add(Button.primary("frg_ipad", "iPad"));
-                buttons.add(Button.primary("frg_ipod", "iPod"));
-                buttons.add(Button.primary("frg_apple_tv", "Apple TV"));
-                break;
-            }
-                case "frg_iphone": {
-                    eb.setDescription("What chip does your iPhone have?");
-                    buttons.add(Button.primary("frg_iphone_a10_or_earlier", "A10 or earlier"));
-                    buttons.add(Button.primary("frg_iphone_a11", "A11"));
-                    buttons.add(Button.primary("frg_iphone_a12_or_later", "A12 or later"));
-                    break;
-                }
-                    case "frg_iphone_a10_or_earlier": {
-                        eb.setTitle("iPhone — A10 or earlier");
-                        eb.addField("Can restore to:", "iOS 14.0 or later", true);
-                        eb.addField("FutureRestore:", "[v194](https://github.com/m1stadev/futurerestore/releases/tag/194) or later", true);
-                        break;
-                    }
-                    case "frg_iphone_a11": {
-                        eb.setTitle("iPhone — A11");
-                        eb.addField("Can restore to:", "iOS 14.3 or later", true);
-                        eb.addField("FutureRestore:", "[v2.0.0 beta](https://nightly.link/m1stadev/futurerestore/workflows/ci/test)", true);
-                        break;
-                    }
-                    case "frg_iphone_a12_or_later": {
-                        eb.setTitle("iPhone — A12 or later");
-                        eb.addField("Can restore to:", "iOS 14.0 or later", true);
-                        eb.addField("FutureRestore:", "[v2.0.0 beta](https://nightly.link/m1stadev/futurerestore/workflows/ci/test)", true);
-                        break;
-                    }
-                case "frg_ipad": {
-                    eb.setDescription("What chip does your iPad have?");
-                    buttons.add(Button.primary("frg_ipad_a10_or_earlier", "A10 or earlier"));
-                    buttons.add(Button.primary("frg_ipad_a12_or_later", "A12 or later"));
-                    break;
-                }
-                    case "frg_ipad_a10_or_earlier": {
-                        eb.setTitle("iPad — A10 or earlier");
-                        eb.addField("Can restore to:", "iOS 14.0 or later", true);
-                        eb.addField("FutureRestore:", "[v2.0.0 beta](https://nightly.link/m1stadev/futurerestore/workflows/ci/test)", true);
-                        break;
-                    }
-                    case "frg_ipad_a12_or_later": {
-                        eb.setTitle("iPad — A12 or later");
-                        eb.addField("Can restore to:", "iOS 14.0 or later", true);
-                        eb.addField("FutureRestore:", "[v2.0.0 beta](https://nightly.link/m1stadev/futurerestore/workflows/ci/test)", true);
-                        break;
-                    }
-                case "frg_ipod": {
-                    eb.setDescription("What chip does your iPod have?");
-                    buttons.add(Button.primary("frg_ipod_a10_or_earlier", "A10 or earlier"));
-                    break;
-                }
-                    case "frg_ipod_a10_or_earlier": {
-                        eb.setTitle("iPod — A10 or earlier");
-                        eb.addField("Can restore to:", "iOS 14.0 or later", true);
-                        eb.addField("FutureRestore:", "[v2.0.0 beta](https://nightly.link/m1stadev/futurerestore/workflows/ci/test)", true);
-                        break;
-                    }
-                    case "frg_ipod_a12_or_later": {
-                        eb.addField("Can restore to:", "iOS 14.0 or later", true);
-                        eb.addField("FutureRestore:", "[v2.0.0 beta](https://nightly.link/m1stadev/futurerestore/workflows/ci/test)", true);
-                        break;
-                    }
-                case "frg_apple_tv": {
-                    eb.setDescription("What Apple TV do you have?");
-                    buttons.add(Button.primary("frg_apple_tv_early", "Apple TV 3 or Earlier"));
-                    buttons.add(Button.primary("frg_apple_tv_hd", "Apple TV HD"));
-                    buttons.add(Button.primary("frg_apple_tv_4k", "Apple TV 4K or later"));
-                    break;
-                }
-                    case "frg_apple_tv_early": {
-                        eb.setTitle("Apple TV — 3rd Gen or earlier");
-                        eb.addField("Can restore to:", "No clue, this TV is older than JTV's mother", true);
-                        eb.addField("FutureRestore:", "[tihmstar](https://github.com/tihmstar/futurerestore/) maybe?", true);
-                        eb.addField("Hotel:", "Trivago", true);
-                        break;
-                    }
-                    case "frg_apple_tv_hd": {
-                        eb.setTitle("Apple TV HD");
-                        eb.addField("Can restore to:", "tvOS 14.0 or later", true);
-                        eb.addField("FutureRestore:", "[v194](https://github.com/m1stadev/futurerestore/releases/tag/194) or later", true);
-                        break;
-                    }
-                    case "frg_apple_tv_4k": {
-                        eb.setTitle("Apple TV — 4K or Later");
-                        eb.addField("Restoring:", "Cannot restore, no public iPSWs available.", true);
-                        eb.addField("FutureRestore:", "You'd need a special cable for the computer to even recognize the device. Also, 4K gen 2 has nonce entanglement. Good luck setting a generator and saving blobs lol", true);
-                        break;
-                    }
-        }
-        // @formatter:on
-        HashMap<String, Object> embedAndButtons = new HashMap<>();
-        embedAndButtons.put("embed", eb.build());
-        embedAndButtons.put("buttons", buttons);
-        return embedAndButtons;
-    }
-
-    public static File getBuildManifestFromUrl(String urlString, String userId) throws Exception {
-        URL url = new URL(urlString);
-        String pathToSave = "collected/" + userId + "_BuildManifest.plist";
-
-        // Thanks to airsquared for finding this HttpChannel
-        ZipFile ipsw = new ZipFile(new HttpChannel(url), "ipsw", "UTF8", true, true);
-        ZipArchiveEntry bmEntry = ipsw.getEntry("BuildManifest.plist");
-        if (bmEntry == null) {
-            bmEntry = ipsw.getEntry("AssetData/boot/BuildManifest.plist");
-            if (bmEntry == null) {
-                return null;
-            }
-        }
-
-        InputStream buildManifestInputStream = ipsw.getInputStream(bmEntry);
-        File buildManifest = new File(pathToSave);
-        FileUtils.copyInputStreamToFile(buildManifestInputStream, buildManifest);
-
-        return new File(pathToSave);
-    }
-
-    public static String img4toolVerify(File blob, File bm) throws IOException {
-        ProcessBuilder processBuilder = new ProcessBuilder();
-        processBuilder.command("img4tool", "--shsh", blob.getAbsolutePath(), "--verify", bm.getAbsolutePath());
-        // Merge stderr with stdout
-        processBuilder.redirectErrorStream(true);
-        Process process = processBuilder.start();
-        InputStream inputStream = process.getInputStream();
-        return IOUtils.toString(inputStream, StandardCharsets.UTF_8);
-    }
-
-    public static String tssChecker(ArrayList<String> args) throws IOException {
-        ProcessBuilder processBuilder = new ProcessBuilder();
-        processBuilder.command(args);
-
-        // Merge stderr with stdout
-        processBuilder.redirectErrorStream(true);
-        Process process = processBuilder.start();
-        InputStream inputStream = process.getInputStream();
-        return IOUtils.toString(inputStream, StandardCharsets.UTF_8);
-    }
-
-    /* *** UTILITIES *** */
     public void setMessageOwner(String messageId, String userId) {
         messageAndOwner.put(messageId, userId);
     }

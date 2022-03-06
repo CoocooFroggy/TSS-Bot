@@ -1,17 +1,16 @@
+package com.coocoofroggy;
+
+import com.coocoofroggy.utils.Listeners;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.entities.Activity;
-import net.dv8tion.jda.api.entities.Guild;
-import net.dv8tion.jda.api.interactions.commands.Command;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 
-import java.util.List;
-
 public class Main {
-    static JDA jda;
+    public static JDA jda;
     static String token;
 
-    public static boolean startBot() throws InterruptedException {
+    public static void startBot() throws InterruptedException {
         token = System.getenv("TSSBOT_TOKEN");
         JDABuilder jdaBuilder = JDABuilder.createDefault(token);
         jdaBuilder.setActivity(Activity.watching("blobs."));
@@ -19,27 +18,26 @@ public class Main {
             jda = jdaBuilder.build();
         } catch (Exception e) {
             e.printStackTrace();
-            return false;
+            return;
         }
         jda.addEventListener(new Listeners());
         jda.awaitReady();
-        return true;
     }
 
     public static void registerSlashCommands() {
-//        Guild testGuild = jda.getGuildById("685606700929384489");
-//        assert testGuild != null;
-
-        /*
-        List<Command> commands = jda.retrieveCommands().complete();
+        // Deletes all slash commands
+        /*List<Command> commands = jda.retrieveCommands().complete();
         for (Command command : commands) {
             command.delete().complete();
-        }
+        }*/
 
+        // Coocoo Test guild
+        /*Guild guild = jda.getGuildById("685606700929384489");
+        assert guild != null;*/
 
-         */
-        jda.upsertCommand("minfw", "Find limits to the versions you can FutureRestore to.").complete();
-        jda.upsertCommand("verifyblob", "Verify a blob with img4tool.").complete();
+        jda.upsertCommand("verifyblob", "Verify a blob with img4tool.")
+                .addOption(OptionType.ATTACHMENT, "blob", "Blob file usually .shsh2 or .shsh", true)
+                .complete();
         jda.upsertCommand("bm", "Get a BuildManifest from an iPSW or OTA URL.")
                 .addOption(OptionType.STRING, "url", "URL of iPSW or OTA firmware.", true)
                 .complete();
@@ -48,7 +46,7 @@ public class Main {
                 .complete();
 
     }
-    
+
     public static void main(String[] args) {
         try {
             startBot();
