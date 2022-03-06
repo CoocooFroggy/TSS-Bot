@@ -41,7 +41,7 @@ public class Listeners extends ListenerAdapter {
 
     public static File getBuildManifestFromUrl(String urlString, String userId) throws Exception {
         URL url = new URL(urlString);
-        String pathToSave = "collected/" + userId + "_BuildManifest.plist";
+        String pathToSave = "../files/" + userId + "_BuildManifest.plist";
 
         // Thanks to airsquared for finding this com.coocoofroggy.utils.HttpChannel
         ZipFile ipsw = new ZipFile(new HttpChannel(url), "ipsw", "UTF8", true, true);
@@ -103,7 +103,7 @@ public class Listeners extends ListenerAdapter {
 //                setMessageHook(sentMessage.getId(), hook);
 //                setMessageOwner(sentMessage.getId(), event.getUser().getId());
 
-                File blobFile = new File("collected/" + userId + ".shsh2");
+                File blobFile = new File("../files/" + userId + ".shsh2");
 
                 attachment.downloadToFile(blobFile).complete(blobFile);
 
@@ -421,8 +421,8 @@ public class Listeners extends ListenerAdapter {
                         return;
                     }
                 } else if (!attachments.isEmpty()) {
-                    attachments.get(0).downloadToFile("collected/" + ownerId + "_BuildManifest.plist");
-                    bmFile = new File("collected/" + ownerId + "_BuildManifest.plist");
+                    attachments.get(0).downloadToFile("../files/" + ownerId + "_BuildManifest.plist");
+                    bmFile = new File("../files/" + ownerId + "_BuildManifest.plist");
                 } else {
                     Message sentMessage = hook.sendMessage("No BuildManifest or valid link provided! Please try again.").complete();
                     message.delete().queueAfter(5, TimeUnit.SECONDS);
@@ -478,8 +478,8 @@ public class Listeners extends ListenerAdapter {
                         return;
                     }
                 } else if (!attachments.isEmpty()) {
-                    attachments.get(0).downloadToFile("collected/" + ownerId + "_BuildManifest.plist");
-                    bmFile = new File("collected/" + ownerId + "_BuildManifest.plist");
+                    attachments.get(0).downloadToFile("../files/" + ownerId + "_BuildManifest.plist");
+                    bmFile = new File("../files/" + ownerId + "_BuildManifest.plist");
                 } else if (versionMatcher.find()) {
                     version = versionMatcher.group(1);
                 } else if (buildMatcher.find()) {
