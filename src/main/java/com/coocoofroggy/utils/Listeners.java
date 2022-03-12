@@ -105,7 +105,13 @@ public class Listeners extends ListenerAdapter {
 
                 File blobFile = new File("../files/" + userId + ".shsh2");
 
-                attachment.downloadToFile(blobFile).complete(blobFile);
+                attachment.downloadToFile(blobFile)
+                        .thenAccept(file -> System.out.println("Saved attachment to " + file.getPath()))
+                        .exceptionally(t -> { // handle failure
+                            event.reply("Unable to save blob file. Please try again.").queue();
+                            t.printStackTrace();
+                            return null;
+                        });
 
                 HashMap<String, File> files = new HashMap<>();
                 files.put("blob", blobFile);
