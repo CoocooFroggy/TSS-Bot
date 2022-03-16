@@ -159,7 +159,6 @@ public class Listeners extends ListenerAdapter {
 
                 InteractionHook hook = event
                         .reply("Reply to this message with a BuildManifest, link to firmware, or iOS version/build.")
-                        .addActionRow()
                         .complete();
                 Message sentMessage = hook.retrieveOriginal().complete();
                 setMessageHook(sentMessage.getId(), hook);
