@@ -44,7 +44,7 @@ public class Listeners extends ListenerAdapter {
         String pathToSave = "../files/" + userId + "_BuildManifest.plist";
 
         // Thanks to airsquared for finding this com.coocoofroggy.utils.HttpChannel
-        ZipFile ipsw = new ZipFile(new HttpChannel(url), "ipsw", "UTF8", true, true);
+        ZipFile ipsw = new ZipFile(new HttpChannel(url), userId + " iPSW", StandardCharsets.UTF_16.name(), true, true);
         ZipArchiveEntry bmEntry = ipsw.getEntry("BuildManifest.plist");
         if (bmEntry == null) {
             bmEntry = ipsw.getEntry("AssetData/boot/BuildManifest.plist");
@@ -56,6 +56,8 @@ public class Listeners extends ListenerAdapter {
         InputStream buildManifestInputStream = ipsw.getInputStream(bmEntry);
         File buildManifest = new File(pathToSave);
         FileUtils.copyInputStreamToFile(buildManifestInputStream, buildManifest);
+
+        ipsw.close();
 
         return new File(pathToSave);
     }
