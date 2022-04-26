@@ -63,10 +63,17 @@ cd tsschecker/
 ./autogen.sh --prefix=$HOME/installed/ CPPFLAGS=-I$HOME/installed/include/
 make
 make install
+cd ../
+# liblzfse
+git clone 'https://github.com/lzfse/lzfse.git'
+cd lzfse/
+make install INSTALL_PREFIX=$HOME/installed/
+cd ../
 # img4tool
 git clone 'https://github.com/tihmstar/img4tool.git'
 cd img4tool/
 ./autogen.sh --prefix=$HOME/installed/ CPPFLAGS=-I$HOME/installed/include/
 make
 make install
+cd ../
 echo 'Done!'
