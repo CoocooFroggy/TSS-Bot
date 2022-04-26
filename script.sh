@@ -1,27 +1,49 @@
-#!/bin/bash -i
+#!/bin/bash
 
-# notroot
-git clone 'https://github.com/Gregwar/notroot.git' $HOME/notroot
-echo 'source "$HOME/notroot/bashrc"' >> ~/.bashrc
-source ~/.bashrc
+declare -a pkgs=(
+    "autoconf"
+    "autoconf-archive"
+    "autogen"
+    "automake"
+    "libtool"
+    "m4"
+    "make"
+    "pkg-config"
+    "libzip-dev"
+    "build-essential"
+    "checkinstall"
+    "git"
+    "libtool-bin"
+    "libreadline-dev"
+    "libusb-1.0-0-dev"
+    "libplist-dev"
+)
 
-notroot install -y \
-autoconf \
-autoconf-archive \
-autogen \
-automake \
-libtool \
-m4 \
-make \
-pkg-config \
-libzip-dev \
-build-essential \
-checkinstall \
-git \
-libtool-bin \
-libreadline-dev \
-libusb-1.0-0-dev \
-libplist-dev
+for i in "${pkgs[@]}"
+do
+    apt source $i
+    ./configure --prefix=$HOME/installed
+    make
+    make install
+done
+
+# apt install -y \
+# autoconf \
+# autoconf-archive \
+# autogen \
+# automake \
+# libtool \
+# m4 \
+# make \
+# pkg-config \
+# libzip-dev \
+# build-essential \
+# checkinstall \
+# git \
+# libtool-bin \
+# libreadline-dev \
+# libusb-1.0-0-dev \
+# libplist-dev
 
 mkdir ~/installed/
 
