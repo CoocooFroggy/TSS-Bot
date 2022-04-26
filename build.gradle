@@ -30,6 +30,8 @@ dependencies {
 test {
 }
 
-task stage(type: Exec, dependsOn: ['shadowJar']) {
-    commandLine 'script.sh'
+task installTss(type: Exec) {
+    commandLine './script.sh'
 }
+
+task stage(dependsOn: ['shadowJar', 'installTss'])
