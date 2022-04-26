@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -i
 
 # notroot
 git clone 'https://github.com/Gregwar/notroot.git' $HOME/notroot
