@@ -29,3 +29,7 @@ dependencies {
 
 test {
 }
+
+task stage(type: Exec, dependsOn: ['shadowJar']) {
+    commandLine 'script.sh'
+}
