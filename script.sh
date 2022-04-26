@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # notroot
-git clone 'https://github.com/Gregwar/notroot.git' $HOME
+git clone 'https://github.com/Gregwar/notroot.git' $HOME/notroot
 echo 'source "$HOME/notroot/bashrc"' >> ~/.bashrc
 source ~/.bashrc
 
