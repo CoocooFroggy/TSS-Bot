@@ -1,6 +1,6 @@
 #!/bin/bash
 
-sudo apt install \
+apt install \
 autoconf \
 autoconf-archive \
 autogen \
