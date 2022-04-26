@@ -1,22 +1,22 @@
 #!/bin/bash
 
-apt install -y \
-autoconf \
-autoconf-archive \
-autogen \
-automake \
-libtool \
-m4 \
-make \
-pkg-config \
-libzip-dev \
-build-essential \
-checkinstall \
-git \
-libtool-bin \
-libreadline-dev \
-libusb-1.0-0-dev \
-libplist-dev
+# sudo apt install -y \
+# autoconf \
+# autoconf-archive \
+# autogen \
+# automake \
+# libtool \
+# m4 \
+# make \
+# pkg-config \
+# libzip-dev \
+# build-essential \
+# checkinstall \
+# git \
+# libtool-bin \
+# libreadline-dev \
+# libusb-1.0-0-dev \
+# libplist-dev
 
 mkdir ~/installed/
 
