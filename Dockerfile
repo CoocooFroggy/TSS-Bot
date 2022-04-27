@@ -37,7 +37,7 @@ RUN apt-get install -y \
     libplist-dev \
     libcurl4-openssl-dev \
     python-dev \
-    openssl
+    libssl-dev
 COPY script.sh .
 RUN ./script.sh
 ENTRYPOINT exec java -jar "${ARTIFACT_NAME}"
