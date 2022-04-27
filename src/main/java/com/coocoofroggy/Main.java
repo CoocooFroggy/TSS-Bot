@@ -13,7 +13,7 @@ public class Main {
     static String token;
 
     public static void startBot() throws InterruptedException {
-        token = System.getenv("");
+        token = System.getenv("TSSBOT_TOKEN");
         JDABuilder jdaBuilder = JDABuilder.createDefault(token);
         jdaBuilder.setActivity(Activity.watching("blobs."));
         try {

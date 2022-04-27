@@ -440,7 +440,10 @@ public class Listeners extends ListenerAdapter {
                 files.put("bm", bmFile);
                 userAndFiles.put(ownerId, files);
 
-                event.getMessage().delete().queue();
+                // Delete if we can
+                if (event.getGuild().getSelfMember().hasPermission(Permission.MESSAGE_MANAGE)) {
+                    event.getMessage().delete().queue();
+                }
                 Message sentMessage = hook.editOriginal("All set—press the button to verify.").setActionRow(
                         Button.success("vb_verify", "Verify")
                 ).complete();
