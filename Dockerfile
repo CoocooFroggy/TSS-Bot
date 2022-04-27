@@ -40,4 +40,5 @@ RUN apt-get install -y \
     libssl-dev
 COPY script.sh .
 RUN ./script.sh
+RUN ldconfig -v
 ENTRYPOINT exec java -jar "${ARTIFACT_NAME}"
