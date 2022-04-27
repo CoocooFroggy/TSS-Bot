@@ -1,5 +1,5 @@
 FROM gradle:7.4.2-jdk17 AS TEMP_BUILD_IMAGE
-ENV APP_HOME=/app
+ENV APP_HOME=/app/
 WORKDIR $APP_HOME
 COPY build.gradle settings.gradle $APP_HOME
   
@@ -13,7 +13,7 @@ RUN gradle shadowJar
 
 FROM eclipse-temurin:17
 ENV ARTIFACT_NAME='TSS Portable-1.0-all.jar'
-ENV APP_HOME=/app
+ENV APP_HOME=/app/
     
 WORKDIR $APP_HOME
 COPY --from=TEMP_BUILD_IMAGE $APP_HOME/build/libs/$ARTIFACT_NAME .
