@@ -50,9 +50,7 @@ public class Main {
     }
 
     public static void main(String[] args) {
-        if (!new File("files").mkdir()) {
-            throw new RuntimeException("Couldn't make files dir.");
-        }
+        new File("files").mkdir();
         try {
             startBot();
         } catch (InterruptedException e) {
