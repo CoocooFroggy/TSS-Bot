@@ -1,5 +1,8 @@
 #!/bin/bash
 
+cp /etc/apt/sources.list sources.list
+sed -Ei 's/^# deb-src /deb-src /' sources.list
+
 declare -a pkgs=(
     "autoconf"
     "autoconf-archive"
@@ -21,7 +24,7 @@ declare -a pkgs=(
 
 for i in "${pkgs[@]}"
 do
-    apt source $i
+    apt-get -o Dir::Etc::SourceList=./sources.list source $i
     ./configure --prefix=$HOME/installed
     make
     make install
