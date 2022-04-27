@@ -6,6 +6,8 @@ import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 
+import java.io.File;
+
 public class Main {
     public static JDA jda;
     static String token;
@@ -48,6 +50,9 @@ public class Main {
     }
 
     public static void main(String[] args) {
+        if (!new File("files").mkdir()) {
+            throw new RuntimeException("Couldn't make files dir.");
+        }
         try {
             startBot();
         } catch (InterruptedException e) {
