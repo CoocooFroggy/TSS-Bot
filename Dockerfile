@@ -36,7 +36,7 @@ RUN apt-get install -y \
     libusb-1.0-0-dev \
     libplist-dev \
     libcurl4-openssl-dev \
-    python-dev \
+    python2-dev \
     libssl-dev
 WORKDIR /tmp/build
 COPY script.sh .
