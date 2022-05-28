@@ -19,15 +19,16 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
+import xmlwise.Plist;
+import xmlwise.XmlParseException;
 
 import java.awt.*;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.*;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -72,6 +73,16 @@ public class Listeners extends ListenerAdapter {
         return IOUtils.toString(inputStream, StandardCharsets.UTF_8);
     }
 
+    public static String img4toolInfo(File blob) throws IOException {
+        ProcessBuilder processBuilder = new ProcessBuilder();
+        processBuilder.command("img4tool", "--shsh", blob.getAbsolutePath());
+        // Merge stderr with stdout
+        processBuilder.redirectErrorStream(true);
+        Process process = processBuilder.start();
+        InputStream inputStream = process.getInputStream();
+        return IOUtils.toString(inputStream, StandardCharsets.UTF_8);
+    }
+
     public static String tssChecker(ArrayList<String> args) throws IOException {
         ProcessBuilder processBuilder = new ProcessBuilder();
         processBuilder.command(args);
@@ -106,8 +117,7 @@ public class Listeners extends ListenerAdapter {
 //                setMessageOwner(sentMessage.getId(), event.getUser().getId());
 
                 File blobFile = new File("files/" + userId + ".shsh2");
-
-                attachment.downloadToFile(blobFile)
+                attachment.getProxy().downloadToFile(blobFile)
                         .thenAccept(file -> System.out.println("Saved attachment to " + file.getPath()))
                         .exceptionally(t -> { // handle failure
                             event.reply("Unable to save blob file. Please try again.").queue();
@@ -123,6 +133,85 @@ public class Listeners extends ListenerAdapter {
                 Message sentMessage = hook.retrieveOriginal().complete();
                 setMessageHook(sentMessage.getId(), hook);
                 setMessageOwner(sentMessage.getId(), event.getUser().getId());
+            }
+            case "blobinfo" -> {
+                Message.Attachment attachment = Objects.requireNonNull(event.getOption("blob")).getAsAttachment(); // Required arg
+                InteractionHook hook = event.deferReply().complete();
+
+                File blobFile = new File("files/" + userId + ".shsh2");
+                try {
+                    attachment.getProxy().downloadToFile(blobFile).get();
+                } catch (InterruptedException | ExecutionException e) {
+                    hook.editOriginal("Unable to save blob file. Please try again.").queue();
+                    throw new RuntimeException(e);
+                }
+
+                String result;
+                try {
+                    result = img4toolInfo(blobFile);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    hook.editOriginal("Failed to run img4tool. Stack trace:\n" +
+                            "```\n" +
+                            Arrays.toString(e.getStackTrace()) +
+                            "\n" +
+                            "```").queue();
+                    throw new RuntimeException(e);
+                }
+                EmbedBuilder eb = new EmbedBuilder();
+                eb.setFooter(event.getUser().getName(), event.getUser().getAvatarUrl());
+                if (result.contains("img4tool: failed with exception:")) {
+                    String log = makeLogDiscordFriendly(result);
+                    eb.setColor(new Color(16753152))
+                            .setDescription(log);
+                } else {
+                    eb.setTitle("SHSH Info")
+                            .setColor(new Color(708352));
+
+                }
+                System.out.println(result);
+                Pattern pattern = Pattern.compile("(?:.*: )?(.*): (.*)");
+                Matcher matcher = pattern.matcher(result);
+                int line = -1;
+                while (matcher.find()) {
+                    line++;
+                    // Skip the first 2 lines (img4tool info)
+                    if (line < 2)
+                        continue;
+                    // Group 1 = Name of field
+                    String fieldName = matcher.group(1);
+                    // Group 2 = Field value
+                    String value = matcher.group(2);
+
+                    switch (fieldName.toUpperCase()) {
+                        case "BNCH" -> fieldName = "AP Nonce (BNCH)";
+                        case "SNON" -> fieldName = "SEP Nonce (SNON)";
+                        case "ECID" -> value = value.substring(0, 4) + "X".repeat(value.length() - 4); // Hide ECID
+                    }
+                    eb.addField(fieldName + ":", "`" + value + "`", true);
+                }
+                // Generator
+                String generator;
+                try {
+                    String contents = FileUtils.readFileToString(blobFile, StandardCharsets.UTF_8);
+                    Map<String, Object> plist = Plist.fromXml(contents);
+                    generator = (String) plist.get("generator");
+                } catch (IOException | XmlParseException e) {
+                    hook.editOriginal("Unable to read blob file. Please try again.").queue();
+                    throw new RuntimeException(e);
+                }
+                if (generator != null) {
+                    eb.addField("Generator", "`" + generator + "`", true);
+                }
+
+                // Exceptions
+                pattern = Pattern.compile("(?<=\\[exception]:\\nwhat=).*");
+                matcher = pattern.matcher(result);
+                while (matcher.find()) {
+                    eb.addField("Exception:", matcher.group(0), true);
+                }
+
+                hook.editOriginalEmbeds(eb.build()).queue();
             }
             case "bm" -> {
                 String url = Objects.requireNonNull(event.getOption("url")).getAsString();
@@ -180,71 +269,14 @@ public class Listeners extends ListenerAdapter {
             if (isNotMenuOwner(event, user))
                 return;
             // Get rid of verify button
-            event.getInteraction().editComponents().complete();
-            Message runningMessage = event.getMessage().editMessage("Running img4tool...").complete();
+            Message runningMessage = event.getMessage().editMessage("Running img4tool...").setActionRows().complete();
 
             File blob = userAndFiles.get(user.getId()).get("blob");
             File bm = userAndFiles.get(user.getId()).get("bm");
+
+            String result;
             try {
-                String result = img4toolVerify(blob, bm);
-                // Remove all conflicting markdown code block things
-                result = result.replaceAll("`", "");
-                // Keep it under Discord's character limits
-                int amountToSubstring = 0;
-                ArrayList<String> firstLines = new ArrayList<>();
-                if (result.length() > 1500) {
-                    String[] allLines = result.split("\n");
-                    int i = 0;
-                    for (String line : allLines) {
-                        firstLines.add(line);
-                        i++;
-                        // Only first 5 lines
-                        if (i >= 5)
-                            break;
-                    }
-                    firstLines.add("...\n");
-                    amountToSubstring = result.length() - 1500;
-                }
-
-                String log = "```" +
-                        StringUtils.join(firstLines, "\n") +
-                        result.substring(amountToSubstring) +
-                        "```";
-
-                EmbedBuilder eb = new EmbedBuilder();
-                eb.setFooter(user.getName(), user.getAvatarUrl());
-                eb.setDescription(log);
-                if (result.contains("img4tool: failed with exception:")) {
-                    eb.setColor(new Color(16753152));
-                } else if (result.contains("[IMG4TOOL] APTicket is GOOD!")) {
-                    eb
-                            .setTitle("APTicket is GOOD")
-                            .setDescription("")
-                            .setColor(new Color(708352));
-                } else if (result.contains("[IMG4TOOL] APTicket is BAD!")) {
-                    eb
-                            .setTitle("APTicket is BAD")
-                            .setDescription("")
-                            .setColor(new Color(16711680));
-                }
-
-                // Variant : Customer Erase Install (IPSW)
-                // DeviceClass : n112ap
-                // etc.
-                System.out.println(result);
-                Pattern pattern = Pattern.compile("(.*) : (.*)");
-                Matcher matcher = pattern.matcher(result);
-                while (matcher.find()) {
-                    eb.addField(matcher.group(1) + ":", matcher.group(2), true);
-                }
-                pattern = Pattern.compile("(?<=\\[exception]:\\nwhat=).*");
-                matcher = pattern.matcher(result);
-                while (matcher.find()) {
-                    eb.addField("Exception:", matcher.group(0), true);
-                }
-
-                runningMessage.editMessageEmbeds(eb.build()).queue();
-                runningMessage.editMessage(" ").queue();
+                result = img4toolVerify(blob, bm);
             } catch (IOException e) {
                 e.printStackTrace();
                 runningMessage.editMessage("Failed to run img4tool. Stack trace:\n" +
@@ -252,7 +284,38 @@ public class Listeners extends ListenerAdapter {
                         Arrays.toString(e.getStackTrace()) +
                         "\n" +
                         "```").queue();
+                throw new RuntimeException(e);
             }
+            EmbedBuilder eb = new EmbedBuilder();
+            eb.setFooter(user.getName(), user.getAvatarUrl());
+            if (result.contains("img4tool: failed with exception:")) {
+                String log = makeLogDiscordFriendly(result);
+                eb.setColor(new Color(16753152))
+                        .setDescription(log);
+            } else if (result.contains("[IMG4TOOL] APTicket is GOOD!")) {
+                eb.setTitle("APTicket is GOOD")
+                        .setColor(new Color(708352));
+            } else if (result.contains("[IMG4TOOL] APTicket is BAD!")) {
+                eb.setTitle("APTicket is BAD")
+                        .setColor(new Color(16711680));
+            }
+
+            // Variant : Customer Erase Install (IPSW)
+            // DeviceClass : n112ap
+            // etc.
+            System.out.println(result);
+            Pattern pattern = Pattern.compile("(.*) : (.*)");
+            Matcher matcher = pattern.matcher(result);
+            while (matcher.find()) {
+                eb.addField(matcher.group(1) + ":", matcher.group(2), true);
+            }
+            pattern = Pattern.compile("(?<=\\[exception]:\\nwhat=).*");
+            matcher = pattern.matcher(result);
+            while (matcher.find()) {
+                eb.addField("Exception:", matcher.group(0), true);
+            }
+
+            runningMessage.editMessageEmbeds(eb.build()).override(true).queue();
         } else if (buttonId.equals("tss_check")) {
             // If the user who pressed the button isn't the same as the owner of this message, say no
             if (isNotMenuOwner(event, user))
@@ -260,9 +323,8 @@ public class Listeners extends ListenerAdapter {
             /*// Get rid of Check TSS button
             event.getMessage().delete().queue();*/
 
-            event.getInteraction().editComponents().complete();
             // Start "thinking"
-            Message runningMessage = event.getMessage().editMessage("Running tsschecker...").complete();
+            Message runningMessage = event.getMessage().editMessage("Running tsschecker...").setActionRows().complete();
 
             HashMap<String, String> tss = userAndTss.get(user.getId());
 
@@ -293,29 +355,7 @@ public class Listeners extends ListenerAdapter {
 
             try {
                 String result = tssChecker(args);
-                // Remove all conflicting markdown code block things
-                result = result.replaceAll("`", "");
-                // Keep it under Discord's character limits
-                int amountToSubstring = 0;
-                ArrayList<String> firstLines = new ArrayList<>();
-                if (result.length() > 1500) {
-                    String[] allLines = result.split("\n");
-                    int i = 0;
-                    for (String line : allLines) {
-                        firstLines.add(line);
-                        i++;
-                        // Only first 5 lines
-                        if (i >= 5)
-                            break;
-                    }
-                    firstLines.add("...\n");
-                    amountToSubstring = result.length() - 1500;
-                }
-
-                String log = "```" +
-                        StringUtils.join(firstLines, "\n") +
-                        result.substring(amountToSubstring) +
-                        "```";
+                String log = makeLogDiscordFriendly(result);
 
                 EmbedBuilder eb = new EmbedBuilder();
                 eb.setFooter(user.getName(), user.getAvatarUrl());
@@ -354,9 +394,7 @@ public class Listeners extends ListenerAdapter {
                     eb.setColor(new Color(16711680));
                 }
 
-
-                runningMessage.editMessageEmbeds(eb.build()).complete();
-                runningMessage.editMessage(" ").queue();
+                runningMessage.editMessageEmbeds(eb.build()).override(true).complete();
             } catch (IOException e) {
                 e.printStackTrace();
                 runningMessage.editMessage("Failed to run tsschecker. Stack trace:\n" +
@@ -368,9 +406,36 @@ public class Listeners extends ListenerAdapter {
         }
     }
 
+    @NotNull
+    private String makeLogDiscordFriendly(String result) {
+        // Remove all conflicting markdown code block things
+        String foldedResult = result.replaceAll("`", "");
+        // Keep it under Discord's character limits
+        int amountToSubstring = 0;
+        ArrayList<String> firstLines = new ArrayList<>();
+        if (foldedResult.length() > 1500) {
+            String[] allLines = foldedResult.split("\n");
+            int i = 0;
+            for (String line : allLines) {
+                firstLines.add(line);
+                i++;
+                // Only first 5 lines
+                if (i >= 5)
+                    break;
+            }
+            firstLines.add("...\n");
+            amountToSubstring = foldedResult.length() - 1500;
+        }
+
+        return "```" +
+                StringUtils.join(firstLines, "\n") +
+                foldedResult.substring(amountToSubstring) +
+                "```";
+    }
+
     private boolean isNotMenuOwner(@NotNull ButtonInteractionEvent event, User user) {
         if (messageAndOwner.get(event.getMessageId()) == null) {
-            event.reply("Something went wrong—I forgot who summoned this menu! Please run `/verifyblob` again.").setEphemeral(true).queue();
+            event.reply("Something went wrong—I forgot who summoned this menu! Please run the command again.").setEphemeral(true).queue();
             return true;
         } else if (!messageAndOwner.get(event.getMessageId()).equals(user.getId())) {
             event.reply("This is not your menu! Start your own with `/verifyblob`.").setEphemeral(true).queue();
@@ -428,7 +493,7 @@ public class Listeners extends ListenerAdapter {
                         return;
                     }
                 } else if (!attachments.isEmpty()) {
-                    attachments.get(0).downloadToFile("files/" + ownerId + "_BuildManifest.plist");
+                    attachments.get(0).getProxy().downloadToFile(new File("files/" + ownerId + "_BuildManifest.plist"));
                     bmFile = new File("files/" + ownerId + "_BuildManifest.plist");
                 } else {
                     Message sentMessage = hook.sendMessage("No BuildManifest or valid link provided! Please try again.").complete();
@@ -488,7 +553,7 @@ public class Listeners extends ListenerAdapter {
                         return;
                     }
                 } else if (!attachments.isEmpty()) {
-                    attachments.get(0).downloadToFile("files/" + ownerId + "_BuildManifest.plist");
+                    attachments.get(0).getProxy().downloadToFile(new File("files/" + ownerId + "_BuildManifest.plist"));
                     bmFile = new File("files/" + ownerId + "_BuildManifest.plist");
                 } else if (versionMatcher.find()) {
                     version = versionMatcher.group(1);
@@ -511,7 +576,10 @@ public class Listeners extends ListenerAdapter {
 
                 userAndTss.put(event.getAuthor().getId(), tss);
 
-                event.getMessage().delete().queue();
+                // Delete if we can
+                if (event.getGuild().getSelfMember().hasPermission(Permission.MESSAGE_MANAGE)) {
+                    event.getMessage().delete().queue();
+                }
                 Message sentMessage = hook.editOriginal("All set—press the button to check signing status.").setActionRow(
                         Button.success("tss_check", "Check TSS")
                 ).complete();

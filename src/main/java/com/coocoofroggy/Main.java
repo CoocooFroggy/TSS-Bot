@@ -38,7 +38,10 @@ public class Main {
         assert guild != null;*/
 
         jda.upsertCommand("verifyblob", "Verify a blob with img4tool.")
-                .addOption(OptionType.ATTACHMENT, "blob", "Blob file usually .shsh2 or .shsh", true)
+                .addOption(OptionType.ATTACHMENT, "blob", "Blob file, usually .shsh2 or .shsh", true)
+                .complete();
+        jda.upsertCommand("blobinfo", "Display a blob's info using img4tool.")
+                .addOption(OptionType.ATTACHMENT, "blob", "Blob file, usually .shsh2 or .shsh", true)
                 .complete();
         jda.upsertCommand("bm", "Get a BuildManifest from an iPSW or OTA URL.")
                 .addOption(OptionType.STRING, "url", "URL of iPSW or OTA firmware.", true)
