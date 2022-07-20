@@ -1,0 +1,87 @@
+trigger:
+- master
+
+resources:
+- repo: self
+
+variables:
+  tag: '$(Build.BuildId)'
+  repository: 'coocoofroggy/tssbot'
+
+stages:
+- stage: Build
+  displayName: Build image
+  jobs:
+  - job: Build
+    displayName: Build
+    # Must be arm64 built, so on our pi
+    pool:
+      name: Default
+      demands:
+      - agent.name -equals raspberrypi
+    # pool:
+    #   vmImage: ubuntu-latest
+    steps:
+    - task: Docker@2
+      displayName: Build image
+      inputs:
+        command: build
+        dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
+        repository: ${{ variables.repository }}
+        tags: |
+          latest
+    - task: CmdLine@2
+      displayName: Save image to file
+      inputs:
+        script: 'docker save -o $BUILD_ARTIFACTSTAGINGDIRECTORY/image.tar $REPOSITORY'
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        ArtifactName: 'Image'
+        publishLocation: 'Container'
+- stage: Deploy
+  displayName: Deploy
+  jobs:
+  - job: Deploy
+    displayName: Deploy
+    pool:
+      name: Default
+      demands:
+      - agent.name -equals raspberrypi
+    steps:
+    - task: Bash@3
+      inputs:
+        targetType: 'inline'
+        script: |
+          #!/bin/bash
+
+          if [[ "$USER" != "pi" ]]; then
+          	sudo -H -u pi bash -c "$0"
+          else
+          	ID=$(docker ps -aqf "ancestor=$REPOSITORY")
+          	docker stop $ID || true
+          	docker rm $ID || true
+          fi
+    - task: DownloadBuildArtifacts@0
+      inputs:
+        buildType: 'current'
+        downloadType: 'single'
+        artifactName: 'Image'
+        downloadPath: '$(System.ArtifactsDirectory)'
+        cleanDestinationFolder: true
+    - task: Bash@3
+      inputs:
+        targetType: 'inline'
+        script: |
+          #!/bin/bash
+          
+          if [[ "$USER" != "pi" ]]; then
+          	sudo -H -u pi bash -c "$0"
+          else
+          	docker load -i $SYSTEM_ARTIFACTSDIRECTORY/Image/image.tar
+          	docker run -d --restart unless-stopped \
+          		-e "TSSBOT_TOKEN=$TSSBOT_TOKEN" \
+          		$REPOSITORY
+          fi
+      env:
+        TSSBOT_TOKEN: $(tssbot.token)
