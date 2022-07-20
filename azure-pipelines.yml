@@ -6,6 +6,7 @@ resources:
 
 variables:
   tag: '$(Build.BuildId)'
+  repository: 'coocoofroggy/tssbot'
 
 stages:
 - stage: Build
@@ -21,13 +22,13 @@ stages:
       inputs:
         command: build
         dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
-        repository: coocoofroggy/tssbot
+        repository: ${{ variables.repository }}
         tags: |
           latest
     - task: CmdLine@2
       displayName: Save image to file
       inputs:
-        script: 'docker save -o $BUILD_ARTIFACTSTAGINGDIRECTORY/image.tar coocoofroggy/tssbot'
+        script: 'docker save -o $BUILD_ARTIFACTSTAGINGDIRECTORY/image.tar $REPOSITORY'
     - task: PublishBuildArtifacts@1
       inputs:
         PathtoPublish: '$(Build.ArtifactStagingDirectory)'
@@ -41,12 +42,21 @@ stages:
     pool:
       name: Default
       demands:
-      - agent.name -equals Everything-in-a-VM
+      - agent.name -equals raspberrypi
     steps:
     - task: Bash@3
       inputs:
-        filePath: '/home/coocoofroggy/stopper.sh'
-        arguments: 'coocoofroggy/tssbot'
+        targetType: 'inline'
+        script: |
+          #!/bin/bash
+
+          if [[ "$USER" != "coocoofroggy" ]]; then
+          	sudo -H -u coocoofroggy bash -c "$0"
+          else
+          	ID=$(docker ps -aqf "ancestor=$REPOSITORY")
+          	docker stop $ID || true
+          	docker rm $ID || true
+          fi
     - task: DownloadBuildArtifacts@0
       inputs:
         buildType: 'current'
@@ -56,5 +66,15 @@ stages:
         cleanDestinationFolder: true
     - task: Bash@3
       inputs:
-        filePath: '/home/coocoofroggy/tssbotupdater.sh'
-        arguments: '$SYSTEM_ARTIFACTSDIRECTORY/Image/image.tar'
+        targetType: 'inline'
+        script: |
+          #!/bin/bash
+          
+          if [[ "$USER" != "coocoofroggy" ]]; then
+          	sudo -H -u coocoofroggy bash -c "$0"
+          else
+          	docker load -i $SYSTEM_ARTIFACTSDIRECTORY/Image/image.tar
+          	docker run -d --restart unless-stopped \
+          		-e 'TSSBOT_TOKEN=$TSSBOT_TOKEN' \
+          		$REPOSITORY
+          fi
