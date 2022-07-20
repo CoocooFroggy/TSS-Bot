@@ -18,7 +18,13 @@ import org.apache.commons.compress.archivers.zip.ZipFile;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.tika.exception.TikaException;
+import org.apache.tika.metadata.Metadata;
+import org.apache.tika.parser.AutoDetectParser;
+import org.apache.tika.parser.ParseContext;
+import org.apache.tika.sax.BodyContentHandler;
 import org.jetbrains.annotations.NotNull;
+import org.xml.sax.SAXException;
 import xmlwise.Plist;
 import xmlwise.XmlParseException;
 
@@ -37,30 +43,51 @@ public class Listeners extends ListenerAdapter {
 
     final HashMap<String, InteractionHook> messageAndHook = new HashMap<>();
     final HashMap<String, String> messageAndOwner = new HashMap<>();
-    final HashMap<String, HashMap<String, File>> userAndFiles = new HashMap<>();
+    final HashMap<String, HashMap<String, InputStream>> userAndInputStreams = new HashMap<>();
     final HashMap<String, HashMap<String, String>> userAndTss = new HashMap<>();
 
-    public static File getBuildManifestFromUrl(String urlString, String userId) throws Exception {
+    public static InputStream fetchBuildManifestFromUrl(String urlString, String userId) throws Exception {
         URL url = new URL(urlString);
-        String pathToSave = "files/" + userId + "_BuildManifest.plist";
 
-        // Thanks to airsquared for finding this com.coocoofroggy.utils.HttpChannel
-        ZipFile ipsw = new ZipFile(new HttpChannel(url), userId + " iPSW", StandardCharsets.UTF_8.name(), true, true);
-        ZipArchiveEntry bmEntry = ipsw.getEntry("BuildManifest.plist");
-        if (bmEntry == null) {
-            bmEntry = ipsw.getEntry("AssetData/boot/BuildManifest.plist");
-            if (bmEntry == null) {
+        // Make a new InputStream so that we can reset() it
+        InputStream urlStream = new BufferedInputStream(url.openStream());
+        // Get the true Content-Type, since Apple lies about it
+        String contentType = fetchContentTypeFromUrl(urlStream);
+        // reset() back to beginning to not mess with anything else later
+        urlStream.reset();
+        switch (contentType) {
+            // Link to an actual BM
+            case "application/x-plist" -> {
+                return urlStream;
+            }
+            // Likely an ipsw. Do partial-zip stuff here
+            case "application/zip" -> {
+                // Thanks to airsquared for finding this HttpChannel
+                ZipFile ipsw = new ZipFile(new HttpChannel(url), userId + " iPSW", StandardCharsets.UTF_8.name(), true, true);
+                ZipArchiveEntry bmEntry = ipsw.getEntry("BuildManifest.plist");
+                if (bmEntry == null) {
+                    bmEntry = ipsw.getEntry("AssetData/boot/BuildManifest.plist");
+                    if (bmEntry == null) {
+                        return null;
+                    }
+                }
+                InputStream buildManifestInputStream = ipsw.getInputStream(bmEntry);
+                ipsw.close();
+
+                return buildManifestInputStream;
+            }
+            default -> {
                 return null;
             }
         }
+    }
 
-        InputStream buildManifestInputStream = ipsw.getInputStream(bmEntry);
-        File buildManifest = new File(pathToSave);
-        FileUtils.copyInputStreamToFile(buildManifestInputStream, buildManifest);
-
-        ipsw.close();
-
-        return new File(pathToSave);
+    private static String fetchContentTypeFromUrl(InputStream inputStream) throws IOException, SAXException, TikaException {
+        AutoDetectParser parser = new AutoDetectParser();
+        Metadata metadata = new Metadata();
+        parser.parse(inputStream, new BodyContentHandler(), metadata, new ParseContext());
+        String contentType = metadata.get("Content-Type");
+        return contentType;
     }
 
     public static String img4toolVerify(File blob, File bm) throws IOException {
@@ -116,18 +143,17 @@ public class Listeners extends ListenerAdapter {
 //                setMessageHook(sentMessage.getId(), hook);
 //                setMessageOwner(sentMessage.getId(), event.getUser().getId());
 
-                File blobFile = new File("files/" + userId + ".shsh2");
-                attachment.getProxy().downloadToFile(blobFile)
-                        .thenAccept(file -> System.out.println("Saved attachment to " + file.getPath()))
-                        .exceptionally(t -> { // handle failure
-                            event.reply("Unable to save blob file. Please try again.").queue();
-                            t.printStackTrace();
-                            return null;
-                        });
+                InputStream blobInputStream;
+                try {
+                    blobInputStream = attachment.getProxy().download().get();
+                } catch (InterruptedException | ExecutionException e) {
+                    event.reply("Unable to download blob from your attachment. Please try again.").complete();
+                    return;
+                }
 
-                HashMap<String, File> files = new HashMap<>();
-                files.put("blob", blobFile);
-                userAndFiles.put(userId, files);
+                HashMap<String, InputStream> inputStreams = userAndInputStreams.get(userId);
+                inputStreams.put("blob", blobInputStream);
+                userAndInputStreams.put(userId, inputStreams);
 
                 InteractionHook hook = event.reply("Reply to this message with a BuildManifest or a firmware link to verify the blob against.").complete();
                 Message sentMessage = hook.retrieveOriginal().complete();
@@ -216,10 +242,10 @@ public class Listeners extends ListenerAdapter {
             case "bm" -> {
                 String url = Objects.requireNonNull(event.getOption("url")).getAsString();
                 InteractionHook hook = event.deferReply().complete();
-                File bm;
+                InputStream bmInputStream;
                 try {
-                    bm = getBuildManifestFromUrl(url, userId);
-                    if (bm == null) {
+                    bmInputStream = fetchBuildManifestFromUrl(url, userId);
+                    if (bmInputStream == null) {
                         hook.sendMessage("No BuildManifest found. Check your URL and try again.").queue();
                         return;
                     }
@@ -228,7 +254,7 @@ public class Listeners extends ListenerAdapter {
                     hook.sendMessage("Unable to download BuildManifest from URL. Check your URL and try again.").queue();
                     return;
                 }
-                hook.sendFile(bm).queue();
+                hook.sendFile(bmInputStream, "BuildManifest.plist").queue();
             }
             case "tss" -> {
                 if (event.getChannel() instanceof GuildChannel) {
@@ -271,12 +297,16 @@ public class Listeners extends ListenerAdapter {
             // Get rid of verify button
             Message runningMessage = event.getMessage().editMessage("Running img4tool...").setActionRows().complete();
 
-            File blob = userAndFiles.get(user.getId()).get("blob");
-            File bm = userAndFiles.get(user.getId()).get("bm");
+            InputStream blob = userAndInputStreams.get(user.getId()).get("blob");
+            InputStream bm = userAndInputStreams.get(user.getId()).get("bm");
 
             String result;
             try {
-                result = img4toolVerify(blob, bm);
+                File blobFile = new File(user.getId() + "_blob");
+                FileUtils.copyInputStreamToFile(blob, blobFile);
+                File bmFile = new File(user.getId() + "_bm");
+                FileUtils.copyInputStreamToFile(bm, bmFile);
+                result = img4toolVerify(blobFile, bmFile);
             } catch (IOException e) {
                 e.printStackTrace();
                 runningMessage.editMessage("Failed to run img4tool. Stack trace:\n" +
@@ -438,7 +468,7 @@ public class Listeners extends ListenerAdapter {
             event.reply("Something went wrong—I forgot who summoned this menu! Please run the command again.").setEphemeral(true).queue();
             return true;
         } else if (!messageAndOwner.get(event.getMessageId()).equals(user.getId())) {
-            event.reply("This is not your menu! Start your own with `/verifyblob`.").setEphemeral(true).queue();
+            event.reply("This is not your menu! Start your own with a slash command.").setEphemeral(true).queue();
             return true;
         }
         return false;
@@ -473,13 +503,13 @@ public class Listeners extends ListenerAdapter {
                 Pattern linkPattern = Pattern.compile("https?://.*?(?=\\s|\\n|$)");
                 Matcher linkMatcher = linkPattern.matcher(content);
 
-                File bmFile;
+                InputStream bmInputStream;
                 if (linkMatcher.find()) {
                     String link = linkMatcher.group(0);
                     Message downloadingBmMessage = hook.sendMessage("Downloading BuildManifest...").complete();
                     try {
-                        bmFile = getBuildManifestFromUrl(link, ownerId);
-                        if (bmFile == null) {
+                        bmInputStream = fetchBuildManifestFromUrl(link, ownerId);
+                        if (bmInputStream == null) {
                             downloadingBmMessage.editMessage("No BuildManifest found. Check your URL and try again.").queue();
                             downloadingBmMessage.delete().queueAfter(5, TimeUnit.SECONDS);
                             message.delete().queueAfter(5, TimeUnit.SECONDS);
@@ -493,17 +523,23 @@ public class Listeners extends ListenerAdapter {
                         return;
                     }
                 } else if (!attachments.isEmpty()) {
-                    attachments.get(0).getProxy().downloadToFile(new File("files/" + ownerId + "_BuildManifest.plist"));
-                    bmFile = new File("files/" + ownerId + "_BuildManifest.plist");
+                    try {
+                        bmInputStream = attachments.get(0).getProxy().download().get();
+                    } catch (InterruptedException | ExecutionException e) {
+                        Message sentMessage = hook.sendMessage("Unable to download BuildManifest from your attachment. Please try again.").complete();
+                        message.delete().queueAfter(5, TimeUnit.SECONDS);
+                        sentMessage.delete().queueAfter(5, TimeUnit.SECONDS);
+                        return;
+                    }
                 } else {
                     Message sentMessage = hook.sendMessage("No BuildManifest or valid link provided! Please try again.").complete();
                     message.delete().queueAfter(5, TimeUnit.SECONDS);
                     sentMessage.delete().queueAfter(5, TimeUnit.SECONDS);
                     return;
                 }
-                HashMap<String, File> files = userAndFiles.get(ownerId);
-                files.put("bm", bmFile);
-                userAndFiles.put(ownerId, files);
+                HashMap<String, InputStream> inputStreams = userAndInputStreams.get(ownerId);
+                inputStreams.put("bm", bmInputStream);
+                userAndInputStreams.put(ownerId, inputStreams);
 
                 // Delete if we can
                 if (event.getGuild().getSelfMember().hasPermission(Permission.MESSAGE_MANAGE)) {
@@ -533,15 +569,15 @@ public class Listeners extends ListenerAdapter {
                 Pattern buildPattern = Pattern.compile("(?<=^)((\\d+|[A-Za-z]+)+)(?=\\s|\\n|$)");
                 Matcher buildMatcher = buildPattern.matcher(content);
 
-                File bmFile = null;
+                InputStream bmInputStream = null;
                 String version = null;
                 String build = null;
                 if (linkMatcher.find()) {
                     String link = linkMatcher.group(0);
                     Message downloadingBmMessage = hook.sendMessage("Downloading BuildManifest...").complete();
                     try {
-                        bmFile = getBuildManifestFromUrl(link, ownerId);
-                        if (bmFile == null) {
+                        bmInputStream = fetchBuildManifestFromUrl(link, ownerId);
+                        if (bmInputStream == null) {
                             downloadingBmMessage.editMessage("No BuildManifest found. Check your URL and try again.").queue();
                             downloadingBmMessage.delete().queueAfter(5, TimeUnit.SECONDS);
                             return;
@@ -553,8 +589,11 @@ public class Listeners extends ListenerAdapter {
                         return;
                     }
                 } else if (!attachments.isEmpty()) {
-                    attachments.get(0).getProxy().downloadToFile(new File("files/" + ownerId + "_BuildManifest.plist"));
-                    bmFile = new File("files/" + ownerId + "_BuildManifest.plist");
+                    try {
+                        bmInputStream = attachments.get(0).getProxy().download().get();
+                    } catch (InterruptedException | ExecutionException e) {
+                        hook.sendMessage("Unable to download BuildManifest from your attachment. Please try again.").complete();
+                    }
                 } else if (versionMatcher.find()) {
                     version = versionMatcher.group(1);
                 } else if (buildMatcher.find()) {
@@ -567,8 +606,16 @@ public class Listeners extends ListenerAdapter {
                 }
 
                 HashMap<String, String> tss = userAndTss.get(event.getAuthor().getId());
-                if (bmFile != null)
+                if (bmInputStream != null) {
+                    File bmFile = new File(event.getAuthor().getId() + "_tss_bm");
+                    try {
+                        FileUtils.copyInputStreamToFile(bmInputStream, bmFile);
+                    } catch (IOException e) {
+                        hook.sendMessage("Unable to load your BuildManifest. Please try again.").queue();
+                        return;
+                    }
                     tss.put("bm", bmFile.getAbsolutePath());
+                }
                 if (version != null)
                     tss.put("version", version);
                 if (build != null)
@@ -601,7 +648,7 @@ public class Listeners extends ListenerAdapter {
     public boolean isUserNotOwner(String ownerId, Message message, User author) {
         // No owner for this message where there should be an owner
         if (ownerId == null) {
-            message.reply("Something went wrong—I forgot who summoned me! Please run `/verifyblob` again.").queue();
+            message.reply("Something went wrong—I forgot who summoned me! Please run the command again.").queue();
             return true;
         }
         // If they're not the owner, return true and ignore them

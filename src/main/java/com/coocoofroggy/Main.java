@@ -5,6 +5,7 @@ import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
+import net.dv8tion.jda.api.requests.GatewayIntent;
 
 import java.io.File;
 
@@ -14,7 +15,8 @@ public class Main {
 
     public static void startBot() throws InterruptedException {
         token = System.getenv("TSSBOT_TOKEN");
-        JDABuilder jdaBuilder = JDABuilder.createDefault(token);
+        JDABuilder jdaBuilder = JDABuilder.createLight(token)
+                .enableIntents(GatewayIntent.MESSAGE_CONTENT);
         jdaBuilder.setActivity(Activity.watching("blobs."));
         try {
             jda = jdaBuilder.build();
