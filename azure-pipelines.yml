@@ -80,6 +80,8 @@ stages:
           else
           	docker load -i $SYSTEM_ARTIFACTSDIRECTORY/Image/image.tar
           	docker run -d --restart unless-stopped \
-          		-e "TSSBOT_TOKEN=$(TSSBOT_TOKEN)" \
+          		-e "TSSBOT_TOKEN=$TSSBOT_TOKEN" \
           		$REPOSITORY
           fi
+      env:
+        TSSBOT_TOKEN: $(tssbot.token)
