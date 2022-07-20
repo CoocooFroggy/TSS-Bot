@@ -14,8 +14,13 @@ stages:
   jobs:
   - job: Build
     displayName: Build
+    # Must be arm64 built, so on our pi
     pool:
-      vmImage: ubuntu-latest
+      name: Default
+      demands:
+      - agent.name -equals raspberrypi
+    # pool:
+    #   vmImage: ubuntu-latest
     steps:
     - task: Docker@2
       displayName: Build image
@@ -50,8 +55,8 @@ stages:
         script: |
           #!/bin/bash
 
-          if [[ "$USER" != "coocoofroggy" ]]; then
-          	sudo -H -u coocoofroggy bash -c "$0"
+          if [[ "$USER" != "pi" ]]; then
+          	sudo -H -u pi bash -c "$0"
           else
           	ID=$(docker ps -aqf "ancestor=$REPOSITORY")
           	docker stop $ID || true
@@ -70,8 +75,8 @@ stages:
         script: |
           #!/bin/bash
           
-          if [[ "$USER" != "coocoofroggy" ]]; then
-          	sudo -H -u coocoofroggy bash -c "$0"
+          if [[ "$USER" != "pi" ]]; then
+          	sudo -H -u pi bash -c "$0"
           else
           	docker load -i $SYSTEM_ARTIFACTSDIRECTORY/Image/image.tar
           	docker run -d --restart unless-stopped \
