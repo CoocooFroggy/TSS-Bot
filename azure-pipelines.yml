@@ -1,0 +1,58 @@
+trigger:
+- master
+
+resources:
+- repo: self
+
+variables:
+  tag: '$(Build.BuildId)'
+
+stages:
+- stage: Build
+  displayName: Build image
+  jobs:
+  - job: Build
+    displayName: Build
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - task: Docker@2
+      displayName: Build image
+      inputs:
+        command: build
+        dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
+        repository: coocoofroggy/tssbot
+        tags: |
+          $(tag)
+    - task: CmdLine@2
+      displayName: Save image to file
+      inputs:
+        script: 'docker save -o $BUILD_ARTIFACTSTAGINGDIRECTORY/image.tar coocoofroggy/tssbot'
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        ArtifactName: 'Image'
+        publishLocation: 'Container'
+- stage: Deploy
+  displayName: Deploy
+  jobs:
+  - job: Deploy
+    displayName: Deploy
+    pool:
+      name: Default
+    steps:
+    - task: Bash@3
+      inputs:
+        filePath: '/home/coocoofroggy/stopper.sh'
+        arguments: 'coocoofroggy/tssbot'
+    - task: DownloadBuildArtifacts@0
+      inputs:
+        buildType: 'current'
+        downloadType: 'single'
+        artifactName: 'Image'
+        downloadPath: '$(System.ArtifactsDirectory)'
+        cleanDestinationFolder: true
+    - task: Bash@3
+      inputs:
+        filePath: '/home/coocoofroggy/tssbotupdater.sh'
+        arguments: '$SYSTEM_ARTIFACTSDIRECTORY/Image/image.tar'
