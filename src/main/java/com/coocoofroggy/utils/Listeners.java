@@ -13,24 +13,14 @@ import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.components.buttons.Button;
 import net.dv8tion.jda.internal.utils.PermissionUtil;
-import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
-import org.apache.commons.compress.archivers.zip.ZipFile;
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.tika.exception.TikaException;
-import org.apache.tika.metadata.Metadata;
-import org.apache.tika.parser.AutoDetectParser;
-import org.apache.tika.parser.ParseContext;
-import org.apache.tika.sax.BodyContentHandler;
 import org.jetbrains.annotations.NotNull;
-import org.xml.sax.SAXException;
 import xmlwise.Plist;
 import xmlwise.XmlParseException;
 
 import java.awt.*;
 import java.io.*;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.*;
@@ -45,81 +35,6 @@ public class Listeners extends ListenerAdapter {
     final HashMap<String, String> messageAndOwner = new HashMap<>();
     final HashMap<String, HashMap<String, InputStream>> userAndInputStreams = new HashMap<>();
     final HashMap<String, HashMap<String, String>> userAndTss = new HashMap<>();
-
-    public static InputStream fetchBuildManifestFromUrl(String urlString, String userId) throws Exception {
-        URL url = new URL(urlString);
-
-        // Make a new InputStream so that we can reset() it
-        InputStream urlStream = new BufferedInputStream(url.openStream());
-        // Get the true Content-Type, since Apple lies about it
-        String contentType = fetchContentTypeFromUrl(urlStream);
-        // reset() back to beginning to not mess with anything else later
-        urlStream.reset();
-        switch (contentType) {
-            // Link to an actual BM
-            case "application/x-plist" -> {
-                return urlStream;
-            }
-            // Likely an ipsw. Do partial-zip stuff here
-            case "application/zip" -> {
-                // Thanks to airsquared for finding this HttpChannel
-                ZipFile ipsw = new ZipFile(new HttpChannel(url), userId + " iPSW", StandardCharsets.UTF_8.name(), true, true);
-                ZipArchiveEntry bmEntry = ipsw.getEntry("BuildManifest.plist");
-                if (bmEntry == null) {
-                    bmEntry = ipsw.getEntry("AssetData/boot/BuildManifest.plist");
-                    if (bmEntry == null) {
-                        return null;
-                    }
-                }
-                InputStream buildManifestInputStream = ipsw.getInputStream(bmEntry);
-                ipsw.close();
-
-                return buildManifestInputStream;
-            }
-            default -> {
-                return null;
-            }
-        }
-    }
-
-    private static String fetchContentTypeFromUrl(InputStream inputStream) throws IOException, SAXException, TikaException {
-        AutoDetectParser parser = new AutoDetectParser();
-        Metadata metadata = new Metadata();
-        parser.parse(inputStream, new BodyContentHandler(), metadata, new ParseContext());
-        String contentType = metadata.get("Content-Type");
-        return contentType;
-    }
-
-    public static String img4toolVerify(File blob, File bm) throws IOException {
-        ProcessBuilder processBuilder = new ProcessBuilder();
-        processBuilder.command("img4tool", "--shsh", blob.getAbsolutePath(), "--verify", bm.getAbsolutePath());
-        // Merge stderr with stdout
-        processBuilder.redirectErrorStream(true);
-        Process process = processBuilder.start();
-        InputStream inputStream = process.getInputStream();
-        return IOUtils.toString(inputStream, StandardCharsets.UTF_8);
-    }
-
-    public static String img4toolInfo(File blob) throws IOException {
-        ProcessBuilder processBuilder = new ProcessBuilder();
-        processBuilder.command("img4tool", "--shsh", blob.getAbsolutePath());
-        // Merge stderr with stdout
-        processBuilder.redirectErrorStream(true);
-        Process process = processBuilder.start();
-        InputStream inputStream = process.getInputStream();
-        return IOUtils.toString(inputStream, StandardCharsets.UTF_8);
-    }
-
-    public static String tssChecker(ArrayList<String> args) throws IOException {
-        ProcessBuilder processBuilder = new ProcessBuilder();
-        processBuilder.command(args);
-
-        // Merge stderr with stdout
-        processBuilder.redirectErrorStream(true);
-        Process process = processBuilder.start();
-        InputStream inputStream = process.getInputStream();
-        return IOUtils.toString(inputStream, StandardCharsets.UTF_8);
-    }
 
     @Override
     public void onSlashCommandInteraction(@NotNull SlashCommandInteractionEvent event) {
@@ -174,7 +89,7 @@ public class Listeners extends ListenerAdapter {
 
                 String result;
                 try {
-                    result = img4toolInfo(blobFile);
+                    result = CliUtils.img4toolInfo(blobFile);
                 } catch (IOException e) {
                     e.printStackTrace();
                     hook.editOriginal("Failed to run img4tool. Stack trace:\n" +
@@ -244,7 +159,7 @@ public class Listeners extends ListenerAdapter {
                 InteractionHook hook = event.deferReply().complete();
                 InputStream bmInputStream;
                 try {
-                    bmInputStream = fetchBuildManifestFromUrl(url, userId);
+                    bmInputStream = RemoteUtils.fetchBuildManifestFromUrl(url, userId);
                     if (bmInputStream == null) {
                         hook.sendMessage("No BuildManifest found. Check your URL and try again.").queue();
                         return;
@@ -306,7 +221,7 @@ public class Listeners extends ListenerAdapter {
                 FileUtils.copyInputStreamToFile(blob, blobFile);
                 File bmFile = new File(user.getId() + "_bm");
                 FileUtils.copyInputStreamToFile(bm, bmFile);
-                result = img4toolVerify(blobFile, bmFile);
+                result = CliUtils.img4toolVerify(blobFile, bmFile);
             } catch (IOException e) {
                 e.printStackTrace();
                 runningMessage.editMessage("Failed to run img4tool. Stack trace:\n" +
@@ -337,12 +252,12 @@ public class Listeners extends ListenerAdapter {
             Pattern pattern = Pattern.compile("(.*) : (.*)");
             Matcher matcher = pattern.matcher(result);
             while (matcher.find()) {
-                eb.addField(matcher.group(1) + ":", matcher.group(2), true);
+                eb.addField(matcher.group(1), matcher.group(2), true);
             }
             pattern = Pattern.compile("(?<=\\[exception]:\\nwhat=).*");
             matcher = pattern.matcher(result);
             while (matcher.find()) {
-                eb.addField("Exception:", matcher.group(0), true);
+                eb.addField("Exception", matcher.group(0), true);
             }
 
             runningMessage.editMessageEmbeds(eb.build()).override(true).queue();
@@ -384,7 +299,7 @@ public class Listeners extends ListenerAdapter {
             }
 
             try {
-                String result = tssChecker(args);
+                String result = CliUtils.tssChecker(args);
                 String log = makeLogDiscordFriendly(result);
 
                 EmbedBuilder eb = new EmbedBuilder();
@@ -399,12 +314,12 @@ public class Listeners extends ListenerAdapter {
                     Pattern versionPattern = Pattern.compile("(.*?) (.*?) for device (.*)(?= IS being signed!)");
                     Matcher versionMatcher = versionPattern.matcher(result);
                     if (versionMatcher.find()) {
-                        String vPrefix = "Version:";
+                        String vPrefix = "Version";
                         if (versionMatcher.group(1).equals("Build"))
-                            vPrefix = "Build:";
+                            vPrefix = "Build";
                         // Version: 14.7 OR Build: 18G68
                         eb.addField(vPrefix, versionMatcher.group(2), true);
-                        eb.addField("Device: ", device, true);
+                        eb.addField("Device", device, true);
                     }
                     eb.setColor(new Color(708352));
                 } else if (result.contains("IS NOT being signed!")) {
@@ -414,12 +329,12 @@ public class Listeners extends ListenerAdapter {
                     Pattern versionPattern = Pattern.compile("(.*?) (.*?) for device (.*)(?= IS NOT being signed!)");
                     Matcher versionMatcher = versionPattern.matcher(result);
                     if (versionMatcher.find()) {
-                        String vPrefix = "Version:";
+                        String vPrefix = "Version";
                         if (versionMatcher.group(1).equals("Build"))
-                            vPrefix = "Build:";
+                            vPrefix = "Build";
                         // Version: 14.7 OR Build: 18G68
                         eb.addField(vPrefix, versionMatcher.group(2), true);
-                        eb.addField("Device: ", device, true);
+                        eb.addField("Device", device, true);
                     }
                     eb.setColor(new Color(16711680));
                 }
@@ -508,7 +423,7 @@ public class Listeners extends ListenerAdapter {
                     String link = linkMatcher.group(0);
                     Message downloadingBmMessage = hook.sendMessage("Downloading BuildManifest...").complete();
                     try {
-                        bmInputStream = fetchBuildManifestFromUrl(link, ownerId);
+                        bmInputStream = RemoteUtils.fetchBuildManifestFromUrl(link, ownerId);
                         if (bmInputStream == null) {
                             downloadingBmMessage.editMessage("No BuildManifest found. Check your URL and try again.").queue();
                             downloadingBmMessage.delete().queueAfter(5, TimeUnit.SECONDS);
@@ -576,7 +491,7 @@ public class Listeners extends ListenerAdapter {
                     String link = linkMatcher.group(0);
                     Message downloadingBmMessage = hook.sendMessage("Downloading BuildManifest...").complete();
                     try {
-                        bmInputStream = fetchBuildManifestFromUrl(link, ownerId);
+                        bmInputStream = RemoteUtils.fetchBuildManifestFromUrl(link, ownerId);
                         if (bmInputStream == null) {
                             downloadingBmMessage.editMessage("No BuildManifest found. Check your URL and try again.").queue();
                             downloadingBmMessage.delete().queueAfter(5, TimeUnit.SECONDS);
