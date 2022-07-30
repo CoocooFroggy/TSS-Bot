@@ -66,7 +66,7 @@ public class Listeners extends ListenerAdapter {
                     return;
                 }
 
-                HashMap<String, InputStream> inputStreams = userAndInputStreams.get(userId);
+                HashMap<String, InputStream> inputStreams = new HashMap<>();
                 inputStreams.put("blob", blobInputStream);
                 userAndInputStreams.put(userId, inputStreams);
 
